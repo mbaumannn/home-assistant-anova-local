@@ -30,6 +30,7 @@ from .const import (
     LOGGER,
     TRANSPORT_BLUETOOTH,
     TRANSPORT_WIFI,
+    VERSION,
 )
 from .coordinator import AnovaDataUpdateCoordinator
 from .local_server import AnovaLocalServer, AnovaOfflineError
@@ -45,6 +46,9 @@ PLATFORMS: list[Platform] = [
 ]
 
 _CARD_URL = "/anova_local/anova-cook-card.js"
+# Bumped with the integration version so a changed card actually reaches the
+# browser; the Lovelace resource row is updated when this differs.
+_CARD_RESOURCE_URL = f"{_CARD_URL}?v={VERSION}"
 _CARD_PATH = Path(__file__).parent / "frontend" / "anova-cook-card.js"
 _CARD_FLAG = f"{DOMAIN}_card_registered"
 
@@ -60,10 +64,10 @@ async def _async_register_card(hass: HomeAssistant) -> None:
     )
     hass.data[_CARD_FLAG] = True
     if "frontend" in hass.config.components:
-        add_extra_js_url(hass, _CARD_URL)
+        add_extra_js_url(hass, _CARD_RESOURCE_URL)
         # A Lovelace resource is loaded before a dashboard renders, so the card
         # is defined even when the extra module URL would arrive too late.
-        await _async_ensure_lovelace_resource(hass, _CARD_URL)
+        await _async_ensure_lovelace_resource(hass, _CARD_RESOURCE_URL)
 
 
 async def _async_ensure_lovelace_resource(hass: HomeAssistant, url: str) -> None:
