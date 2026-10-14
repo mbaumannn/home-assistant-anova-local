@@ -96,6 +96,8 @@ class AnovaBLE:
         self.name = DEVICE_NAME
         self._client: BleakClient | None = None
         self._cmd_lock = asyncio.Lock()
+        self._notify_queue: asyncio.Queue[bytes] | None = None
+        self._unit: AnovaUnit | None = None
         # Stored cook duration in minutes, shared with the entities. Start
         # cook writes this value to the cooker so the device timer matches the
         # preset shown in Home Assistant.
@@ -110,6 +112,31 @@ class AnovaBLE:
         """
         self.ble_device = device
 
+    # --- notifications -----------------------------------------------------
+    def _on_notify(self, _char, data: bytearray) -> None:
+        queue = self._notify_queue
+        if queue is None:
+            return
+        # Bound the queue: notifications we did not ask for must not pile up.
+        while queue.qsize() > 16:
+            try:
+                queue.get_nowait()
+            except asyncio.QueueEmpty:  # pragma: no cover
+                break
+        queue.put_nowait(bytes(data))
+
+    def _drain_notifications(self) -> None:
+        """Drop stale notifications before writing a new command."""
+        queue = self._notify_queue
+        if queue is None:
+            return
+        while not queue.empty():
+            try:
+                queue.get_nowait()
+            except asyncio.QueueEmpty:  # pragma: no cover
+                break
+
+    # --- connection --------------------------------------------------------
     async def _async_ensure_connected_locked(self) -> BleakClient:
         """Return a connection. Must be called while holding ``_cmd_lock``."""
         if self._client is not None and self._client.is_connected:
@@ -125,14 +152,24 @@ class AnovaBLE:
         except Exception as err:  # noqa: BLE001
             self._client = None
             raise AnovaConnectionError(str(err)) from err
-        # The cooker drops the first command right after a fresh connection,
-        # so give it a moment before subscribing and writing.
-        if POST_CONNECT_SETTLE:
-            try:
+        self._notify_queue = asyncio.Queue()
+        self._unit = None
+        try:
+            # The cooker drops the first command right after a fresh
+            # connection, so give it a moment before subscribing.
+            if POST_CONNECT_SETTLE:
                 await asyncio.sleep(POST_CONNECT_SETTLE)
-            except BaseException:
-                await self._async_disconnect_locked()
-                raise
+            # Subscribe once for the whole connection: the replies of late or
+            # silent commands then land in the queue and are drained before the
+            # next command instead of being mistaken for its answer.
+            async with asyncio.timeout(NOTIFY_TIMEOUT):
+                await self._client.start_notify(CHAR_UUID, self._on_notify)
+        except TimeoutError as err:
+            await self._async_disconnect_locked()
+            raise AnovaConnectionError("timeout subscribing for notifications") from err
+        except BaseException:
+            await self._async_disconnect_locked()
+            raise
         return self._client
 
     async def connect(self) -> None:
@@ -146,52 +183,59 @@ class AnovaBLE:
 
     async def _async_disconnect_locked(self) -> None:
         client, self._client = self._client, None
-        if client is not None:
-            try:
-                await client.disconnect()
-            except Exception:  # noqa: BLE001
-                LOGGER.debug("Anova: error during disconnect", exc_info=True)
+        queue, self._notify_queue = self._notify_queue, None
+        self._unit = None
+        if client is None:
+            return
+        try:
+            if client.is_connected:
+                await client.stop_notify(CHAR_UUID)
+        except Exception:  # noqa: BLE001
+            LOGGER.debug("Anova: stop_notify failed", exc_info=True)
+        try:
+            await client.disconnect()
+        except Exception:  # noqa: BLE001
+            LOGGER.debug("Anova: error during disconnect", exc_info=True)
+        del queue
 
     async def disconnect(self) -> None:
         async with self._cmd_lock:
             await self._async_disconnect_locked()
 
+    # --- commands ----------------------------------------------------------
     async def _command(self, command: str, *, expect_reply: bool | None = True) -> str:
-        queue: asyncio.Queue[bytes] = asyncio.Queue()
+        """Send a command and return the reply.
 
-        async def _cb(_char, data: bytearray) -> None:
-            queue.put_nowait(bytes(data))
-
+        expect_reply True: a reply is required (read/set commands).
+        expect_reply None: a reply is optional (for example ``start``, which
+            echoes ``start``); a missing reply is tolerated.
+        expect_reply False: a silent action (for example ``start time``); only a
+            short settle is awaited.
+        """
         payload = (command + COMMAND_TERMINATOR).encode()
         buffer = bytearray()
 
         async with self._cmd_lock:
             client = await self._async_ensure_connected_locked()
+            queue = self._notify_queue
+            assert queue is not None
+            self._drain_notifications()
             try:
-                # Bound every step of the transaction, not only the wait for
-                # the answer, so a hanging notify or write cannot hold the lock
-                # forever.
-                async with asyncio.timeout(NOTIFY_TIMEOUT):
-                    await client.start_notify(CHAR_UUID, _cb)
                 async with asyncio.timeout(WRITE_TIMEOUT):
                     await client.write_gatt_char(CHAR_UUID, payload, response=False)
-                # True: a reply is required (read/set commands).
-                # None: a reply is optional (for example `start`, which echoes
-                #       `start` on firmware 6.1.1). Wait the full timeout so the
-                #       echo is consumed and cannot leak into the next command.
-                # False: a silent action (for example `start time`), short wait.
-                reply_timeout = REPLY_SETTLE if expect_reply is False else COMMAND_TIMEOUT
-                try:
-                    async with asyncio.timeout(reply_timeout):
-                        # Frame on the terminator: an answer may arrive over
-                        # multiple notifications (fragmented).
-                        while COMMAND_TERMINATOR.encode() not in buffer:
-                            buffer.extend(await queue.get())
-                except TimeoutError:
-                    if expect_reply is True:
-                        raise
-                    # The cooker accepted the action without a reply.
-                    LOGGER.debug("Anova %r: no reply (optional action)", command)
+                if expect_reply is False:
+                    await asyncio.sleep(REPLY_SETTLE)
+                else:
+                    try:
+                        async with asyncio.timeout(COMMAND_TIMEOUT):
+                            # Frame on the terminator: an answer may arrive over
+                            # multiple notifications (fragmented).
+                            while COMMAND_TERMINATOR.encode() not in buffer:
+                                buffer.extend(await queue.get())
+                    except TimeoutError:
+                        if expect_reply is True:
+                            raise
+                        LOGGER.debug("Anova %r: no reply (optional action)", command)
             except TimeoutError as err:
                 # Drop the connection so a late reply cannot land on the next
                 # command.
@@ -203,27 +247,43 @@ class AnovaBLE:
                 # released by the context manager in all cases.
                 await self._async_disconnect_locked()
                 raise
-            else:
-                # Use the local client reference: the disconnect callback may
-                # already have set ``_client`` to None.
-                if client.is_connected:
-                    try:
-                        await client.stop_notify(CHAR_UUID)
-                    except Exception:  # noqa: BLE001
-                        LOGGER.debug("Anova: stop_notify failed", exc_info=True)
 
         reply = buffer.decode(errors="ignore").strip()
         LOGGER.debug("Anova %r -> %r", command, reply)
         return reply
 
-    async def update_state(self) -> AnovaState:
-        status = parse_status(await self._command(CMD_STATUS))
-        current = parse_temperature(await self._command(CMD_READ_TEMP))
-        target = parse_temperature(await self._command(CMD_READ_TARGET_TEMP))
-        minutes, running = parse_timer(await self._command(CMD_READ_TIMER))
-        unit = parse_unit(await self._command(CMD_READ_UNIT))
-        return AnovaState(status, current, target, minutes, running, unit)
+    # --- state -------------------------------------------------------------
+    async def _read(self, command: str, parse):
+        """Send a read command, validate the reply and retry on a stale one.
 
+        The cooker answers slowly, so the reply to an earlier command (for
+        example the ``start`` echo) can still arrive during a read. Retrying
+        discards that stray reply and asks again.
+        """
+        last_error: Exception | None = None
+        for _ in range(3):
+            reply = await self._command(command)
+            try:
+                return parse(reply)
+            except (TypeError, ValueError, IndexError) as err:
+                last_error = err
+                LOGGER.debug(
+                    "Anova %r: unexpected reply %r, retrying", command, reply
+                )
+        raise AnovaCommandError(f"invalid reply for {command!r}") from last_error
+
+    async def update_state(self) -> AnovaState:
+        status = await self._read(CMD_STATUS, parse_status)
+        current = await self._read(CMD_READ_TEMP, parse_temperature)
+        target = await self._read(CMD_READ_TARGET_TEMP, parse_temperature)
+        minutes, running = await self._read(CMD_READ_TIMER, parse_timer)
+        # The unit changes rarely; read it once per connection to keep a poll
+        # short on this slow device.
+        if self._unit is None:
+            self._unit = await self._read(CMD_READ_UNIT, parse_unit)
+        return AnovaState(status, current, target, minutes, running, self._unit)
+
+    # --- write commands ----------------------------------------------------
     async def set_temp(self, temp: float) -> None:
         await self._command(CMD_SET_TEMP.format(temp=temp))
 

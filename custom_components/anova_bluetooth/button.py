@@ -1,4 +1,4 @@
-"""Buttons: start a cook and silence the alarm."""
+"""Buttons: start and stop a cook, and silence the alarm."""
 from __future__ import annotations
 
 from homeassistant.components.button import ButtonEntity
@@ -17,7 +17,13 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     coordinator: AnovaDataUpdateCoordinator = hass.data[DOMAIN][entry.entry_id]
-    async_add_entities([AnovaStartCook(coordinator), AnovaSilence(coordinator)])
+    async_add_entities(
+        [
+            AnovaStartCook(coordinator),
+            AnovaStopCook(coordinator),
+            AnovaSilence(coordinator),
+        ]
+    )
 
 
 class AnovaStartCook(AnovaEntity, ButtonEntity):
@@ -35,6 +41,22 @@ class AnovaStartCook(AnovaEntity, ButtonEntity):
         # only beep and refuse to heat.
         raise_if_low_water(self.coordinator)
         await self.coordinator.client.start_cook()
+        await self.coordinator.async_request_refresh()
+
+
+class AnovaStopCook(AnovaEntity, ButtonEntity):
+    """Stops the cook: heating off and the timer stopped."""
+
+    _attr_name = "Stop cook"
+    _attr_icon = "mdi:stop-circle-outline"
+
+    def __init__(self, coordinator: AnovaDataUpdateCoordinator) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{coordinator.config_entry.unique_id}_stop_cook"
+
+    async def async_press(self) -> None:
+        await self.coordinator.client.stop()
+        await self.coordinator.client.stop_timer()
         await self.coordinator.async_request_refresh()
 
 

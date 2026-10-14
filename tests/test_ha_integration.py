@@ -6,6 +6,7 @@ real ones, so Home Assistant semantics are not hidden.
 """
 from __future__ import annotations
 
+import asyncio
 from types import SimpleNamespace
 
 import pytest
@@ -74,7 +75,9 @@ class FakeBleakClient:
         cmd = bytes(data).decode().rstrip("\r")
         reply = self._responses.get(cmd, "ok\r")
         if self._cb is not None:
-            await self._cb(None, reply.encode())
+            result = self._cb(None, reply.encode())
+            if asyncio.iscoroutine(result):
+                await result
 
     async def disconnect(self):
         self.is_connected = False
