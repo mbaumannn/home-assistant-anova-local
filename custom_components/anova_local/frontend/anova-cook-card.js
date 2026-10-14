@@ -79,6 +79,29 @@ class AnovaCookCard extends HTMLElement {
     return (s && s.attributes) || {};
   }
 
+  _temperatureRange(target, minTemp, maxTemp, unit) {
+    // Keep the range while it still contains the target: re-centring on every
+    // render would snap the knob back to the middle after every drag. A target
+    // that arrives from somewhere else (an automation, the cooker itself, or a
+    // change of unit) lands outside it, and then the dial re-centres on purpose.
+    const current = this._tempRange;
+    if (
+      current &&
+      this._tempRangeUnit === unit &&
+      target >= current.min &&
+      target <= current.max
+    ) {
+      return current;
+    }
+    const range = {
+      min: Math.max(minTemp, target - TEMP_RANGE),
+      max: Math.min(maxTemp, target + TEMP_RANGE),
+    };
+    this._tempRange = range;
+    this._tempRangeUnit = unit;
+    return range;
+  }
+
   _build() {
     this.shadowRoot.innerHTML = `
       <style>
@@ -157,6 +180,16 @@ class AnovaCookCard extends HTMLElement {
     this._slider.addEventListener("value-changed", (ev) =>
       this._onSliderChanged(ev)
     );
+    // While a finger is on the dial, a state update must not move it: the cooker
+    // answers slowly and the next render would fight the drag.
+    const endDrag = () => {
+      this._dragging = false;
+    };
+    this._slider.addEventListener("pointerdown", () => {
+      this._dragging = true;
+    });
+    this._slider.addEventListener("pointerup", endDrag);
+    this._slider.addEventListener("pointercancel", endDrag);
 
     // The duration: tap the number to type one, or hold -/+ for the same field.
     const value = this.shadowRoot.querySelector(".val");
@@ -318,16 +351,19 @@ class AnovaCookCard extends HTMLElement {
     const ringIsTemperature = hasTarget;
     this._ringIsTemperature = ringIsTemperature;   // the drag route reads this back
     this._suppressSlider = true;
-    if (ringIsTemperature) {
-      this._slider.min = Math.max(minTemp, target - TEMP_RANGE);
-      this._slider.max = Math.min(maxTemp, target + TEMP_RANGE);
-      this._slider.step = 0.1;
-      this._slider.value = target;
-    } else {
-      this._slider.min = 0;
-      this._slider.max = cooking ? Math.max(duration, 1) : Number(this._config?.max) || 240;
-      this._slider.step = this._stepSize();
-      this._slider.value = cooking ? Math.min(remaining, this._slider.max) : duration;
+    if (!this._dragging) {                         // never fight a finger on the dial
+      if (ringIsTemperature) {
+        const range = this._temperatureRange(target, minTemp, maxTemp, unit);
+        this._slider.min = range.min;
+        this._slider.max = range.max;
+        this._slider.step = 0.1;
+        this._slider.value = target;
+      } else {
+        this._slider.min = 0;
+        this._slider.max = cooking ? Math.max(duration, 1) : Number(this._config?.max) || 240;
+        this._slider.step = this._stepSize();
+        this._slider.value = cooking ? Math.min(remaining, this._slider.max) : duration;
+      }
     }
     this._slider.disabled = false; // drag to change the temperature mid-cook too
     this._slider.style.setProperty(
