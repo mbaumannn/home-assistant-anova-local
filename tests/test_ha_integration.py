@@ -12,6 +12,7 @@ import pytest
 from homeassistant.components.bluetooth import BluetoothChange
 from homeassistant.components.bluetooth.match import ADDRESS
 from homeassistant.core import HomeAssistant, State
+from homeassistant.exceptions import HomeAssistantError
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
     mock_restore_cache,
@@ -207,3 +208,75 @@ async def test_button_starts_cook_with_stored_preset(hass, monkeypatch):
     # The stored preset is written before heat and countdown, so a device timer
     # left at another value is overwritten.
     assert transport.writes == [b"set timer 42\r", b"start\r", b"start time\r"]
+
+
+def _low_water_responses() -> dict[str, str]:
+    responses = dict(DEFAULT_RESPONSES)
+    responses["status"] = "low water\r"
+    return responses
+
+
+async def test_low_water_indicator_turns_on(hass, monkeypatch):
+    await _setup(hass, monkeypatch, responses=_low_water_responses())
+
+    sensor_id = next(
+        state.entity_id
+        for state in hass.states.async_all("binary_sensor")
+        if "low_water" in state.entity_id
+    )
+    assert hass.states.get(sensor_id).state == "on"
+
+
+async def test_heat_is_refused_on_low_water(hass, monkeypatch):
+    _entry, transport, _captured = await _setup(
+        hass, monkeypatch, responses=_low_water_responses()
+    )
+    climate_id = _entity_id(hass, "climate")
+
+    with pytest.raises(HomeAssistantError):
+        await hass.services.async_call(
+            "climate",
+            "set_hvac_mode",
+            {"entity_id": climate_id, "hvac_mode": "heat"},
+            blocking=True,
+        )
+    await hass.async_block_till_done()
+
+    # The cooker must not be told to start while it reports low water.
+    assert b"start\r" not in transport.writes
+
+
+async def test_start_cook_is_refused_on_low_water(hass, monkeypatch):
+    _entry, transport, _captured = await _setup(
+        hass, monkeypatch, responses=_low_water_responses()
+    )
+    button_id = next(
+        state.entity_id
+        for state in hass.states.async_all("button")
+        if "start_cook" in state.entity_id
+    )
+
+    with pytest.raises(HomeAssistantError):
+        await hass.services.async_call(
+            "button", "press", {"entity_id": button_id}, blocking=True
+        )
+    await hass.async_block_till_done()
+
+    assert b"start\r" not in transport.writes
+
+
+async def test_silence_button_turns_speaker_off(hass, monkeypatch):
+    _entry, transport, _captured = await _setup(hass, monkeypatch)
+    button_id = next(
+        state.entity_id
+        for state in hass.states.async_all("button")
+        if "silence" in state.entity_id
+    )
+    transport.writes.clear()
+
+    await hass.services.async_call(
+        "button", "press", {"entity_id": button_id}, blocking=True
+    )
+    await hass.async_block_till_done()
+
+    assert b"set speaker off\r" in transport.writes

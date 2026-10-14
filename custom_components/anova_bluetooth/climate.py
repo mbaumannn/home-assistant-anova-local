@@ -13,7 +13,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import DOMAIN, AnovaStatus, AnovaUnit
 from .coordinator import AnovaDataUpdateCoordinator
-from .entity import AnovaEntity
+from .entity import AnovaEntity, raise_if_low_water
 
 
 async def async_setup_entry(
@@ -81,6 +81,9 @@ class AnovaClimate(AnovaEntity, ClimateEntity):
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         if hvac_mode == HVACMode.HEAT:
+            # Do not start heating while the cooker reports a low-water alarm:
+            # it would only beep and refuse to heat.
+            raise_if_low_water(self.coordinator)
             await self.coordinator.client.start()
         else:
             await self.coordinator.client.stop()
