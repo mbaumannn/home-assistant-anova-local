@@ -1,36 +1,43 @@
-# Anova Bluetooth — Home Assistant
+# Anova Bluetooth for Home Assistant
 
-Lokale Home Assistant-integratie voor BLE **Anova**-sous-vide-toestellen.
-Geen app, geen cloud, geen account. Gebruikt HA's eigen `bluetooth`-component,
-dus het werkt met **elke connectable Bluetooth-adapter of ESPHome Bluetooth-proxy**.
+Local Home Assistant integration for Bluetooth Anova sous-vide cookers.
+No app, no cloud, no account. It uses Home Assistant's own `bluetooth`
+component, so it works with any connectable Bluetooth adapter or ESPHome
+Bluetooth proxy.
 
-Vereist Home Assistant **2026.5.0** of nieuwer.
+Requires Home Assistant 2026.5.0 or newer.
 
-## Installeren (HACS)
-1. HACS → Integrations → ⋮ → Custom repositories → deze repo, categorie *Integration*.
-2. Installeer "Anova Bluetooth", herstart HA.
-3. Zet de Anova aan. HA vindt hem automatisch → **Koppelen** (of handmatig MAC-adres).
+## Installation (HACS)
+1. HACS > Integrations > menu > Custom repositories, add this repository with category Integration.
+2. Install "Anova Bluetooth" and restart Home Assistant.
+3. Turn the cooker on. Home Assistant discovers it automatically, then select Configure, or add it manually with its MAC address.
 
-## Entiteiten
-- `climate.anova` — uit/warm, doeltemperatuur, huidige watertemperatuur
-- `number.anova_kookduur` — **bewaarde duur-preset** in minuten (blijft staan tijdens koken)
-- `switch.anova_timer` — timer start/stop
-- `sensor.anova_status` — idle / koken / laag water
-- `sensor.anova_timer_resterend` — **live** resterende minuten
-- `button.anova_start_koken` — start verwarmen + timer in één tik
+## Entities
+- `climate.anova_bluetooth`: off/heat, target temperature, current water temperature
+- `number.anova_bluetooth_cook_duration`: stored duration preset in minutes, stays put during a cook
+- `switch.anova_bluetooth_timer`: start and stop the timer
+- `sensor.anova_bluetooth_status`: idle, cooking, low water
+- `sensor.anova_bluetooth_timer_remaining`: live remaining minutes
+- `button.anova_bluetooth_start_cook`: start heating and the timer in one tap
 
-De timer start bij `start time` en loopt op de klok: **de opwarmtijd telt mee**.
+Entity IDs depend on the device name; the list above shows the defaults.
+The timer starts on `start time` and runs on the wall clock, so warm-up time is
+included in the countdown.
 
 ## Auto-connect
-Zet de Anova aan → de entiteiten komen vanzelf online. Uit → `unavailable`.
-De Anova ondersteunt **één** BLE-verbinding tegelijk: laat de Anova-app dicht.
+Turn the cooker on and the entities come online. Turn it off and they become
+`unavailable`. The cooker supports a single BLE connection at a time, so keep
+the Anova app closed.
 
-## Notificaties
-Importeer de blueprints (Instellingen → Automatiseringen → Blueprints):
-- `anova_klaar.yaml` — meldt "klaar" wanneer de **timer afloopt** (niet bij een
-  handmatige stop). Werkt met `switch.anova_timer` (on→off) + `sensor.anova_timer_resterend`.
-- `anova_op_temperatuur.yaml` — meldt wanneer het water op temperatuur is,
-  alleen tijdens een actieve kooksessie en als het toestel beschikbaar is.
+## Notifications
+Import the blueprints from Settings > Automations > Blueprints:
+- `anova_cook_finished.yaml`: notifies when the timer runs out, not when the cook is stopped manually.
+- `anova_reached_temperature.yaml`: notifies when the water reaches the target temperature, only during an active cook and when the device is available.
 
-## Getest met
-Anova Precision Cooker (2018, Bluetooth + WiFi, EU), firmware `ver 6.1.1`.
+## Range
+Bluetooth range matters. Keep the adapter, or a Bluetooth proxy, close to the
+cooker. An ESPHome Bluetooth proxy in the kitchen is recommended when the
+server is far away.
+
+## Tested with
+Anova Precision Cooker (2018, Bluetooth and WiFi, EU), firmware ver 6.1.1.

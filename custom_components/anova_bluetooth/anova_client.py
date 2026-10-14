@@ -1,4 +1,4 @@
-"""Asynchrone BLE-client voor Anova-sous-vide-toestellen (gevendord)."""
+"""Asynchronous BLE client for Anova sous-vide cookers (vendored)."""
 from __future__ import annotations
 
 import asyncio
@@ -35,15 +35,15 @@ from .const import (
 
 
 class AnovaError(Exception):
-    """Basis-fout voor Anova-operaties."""
+    """Base error for Anova operations."""
 
 
 class AnovaConnectionError(AnovaError):
-    """Kon niet verbinden."""
+    """The client could not establish a connection."""
 
 
 class AnovaCommandError(AnovaError):
-    """Commando mislukte of gaf geen antwoord."""
+    """A command failed or returned no answer."""
 
 
 def _clean(raw: str) -> str:
@@ -55,7 +55,7 @@ def parse_status(raw: str) -> AnovaStatus:
     for status in AnovaStatus:
         if cleaned.startswith(status.value):
             return status
-    raise ValueError(f"Onbekende status: {raw!r}")
+    raise ValueError(f"Unknown status: {raw!r}")
 
 
 def parse_temperature(raw: str) -> float:
@@ -73,7 +73,7 @@ def parse_unit(raw: str) -> AnovaUnit:
 
 @dataclass
 class AnovaState:
-    """Eén momentopname van het toestel."""
+    """A single snapshot of the cooker."""
 
     status: AnovaStatus
     current_temp: float
@@ -84,7 +84,7 @@ class AnovaState:
 
 
 class AnovaBLE:
-    """Verbindt met een Anova-toestel en leest/schrijft via het BLE-protocol."""
+    """Connects to an Anova cooker and reads/writes over the BLE protocol."""
 
     def __init__(self, *, ble_device: BLEDevice | object) -> None:
         self.ble_device = ble_device
@@ -93,15 +93,16 @@ class AnovaBLE:
         self._cmd_lock = asyncio.Lock()
 
     def set_ble_device(self, device: BLEDevice) -> None:
-        """Werk het device bij wanneer het opnieuw adverteert (auto-connect).
+        """Update the device when it advertises again (auto-connect).
 
-        Bewust de bestaande verbinding niet verbreken: dit wordt bij elke
-        advertentie aangeroepen en zou anders verbindings-churn veroorzaken.
+        The existing connection is intentionally left in place: this is called
+        on every advertisement and tearing the connection down would cause
+        connection churn.
         """
         self.ble_device = device
 
     async def _async_ensure_connected_locked(self) -> BleakClient:
-        """Zorg voor een verbinding. MOET onder `self._cmd_lock` draaien."""
+        """Return a connection. Must be called while holding ``_cmd_lock``."""
         if self._client is not None and self._client.is_connected:
             return self._client
         try:
@@ -118,8 +119,8 @@ class AnovaBLE:
         return self._client
 
     async def connect(self) -> None:
-        # Verbinden gebeurt ónder dezelfde lock als de commando's, zodat een
-        # poll en een bediening nooit tegelijk een verbinding openen.
+        # Connecting runs under the same lock as commands, so a poll and a
+        # command can never open a connection at the same time.
         async with self._cmd_lock:
             await self._async_ensure_connected_locked()
 
@@ -132,7 +133,7 @@ class AnovaBLE:
             try:
                 await client.disconnect()
             except Exception:  # noqa: BLE001
-                LOGGER.debug("Anova: fout bij disconnect", exc_info=True)
+                LOGGER.debug("Anova: error during disconnect", exc_info=True)
 
     async def disconnect(self) -> None:
         async with self._cmd_lock:
@@ -155,26 +156,26 @@ class AnovaBLE:
                 await client.write_gatt_char(CHAR_UUID, payload, response=False)
                 try:
                     async with asyncio.timeout(COMMAND_TIMEOUT):
-                        # Framen op de terminator: een antwoord kan over meerdere
-                        # notifications (gefragmenteerd) binnenkomen.
+                        # Frame on the terminator: an answer may arrive over
+                        # multiple notifications (fragmented).
                         while COMMAND_TERMINATOR.encode() not in buffer:
                             buffer.extend(await queue.get())
                 except TimeoutError:
                     timed_out = True
             finally:
-                # Vaste clientreferentie: de disconnect-callback heeft `_client`
-                # mogelijk al op None gezet.
+                # Use the local client reference: the disconnect callback may
+                # already have set ``_client`` to None.
                 if client.is_connected:
                     try:
                         await client.stop_notify(CHAR_UUID)
                     except Exception:  # noqa: BLE001
-                        LOGGER.debug("Anova: stop_notify faalde", exc_info=True)
+                        LOGGER.debug("Anova: stop_notify failed", exc_info=True)
 
             if timed_out:
-                # Verbinding sluiten zodat een vertraagd antwoord niet bij het
-                # volgende commando terechtkomt.
+                # Drop the connection so a late reply cannot land on the next
+                # command.
                 await self._async_disconnect_locked()
-                raise AnovaCommandError(f"timeout op {command!r}")
+                raise AnovaCommandError(f"timeout on {command!r}")
 
         reply = buffer.decode(errors="ignore").strip()
         LOGGER.debug("Anova %r -> %r", command, reply)

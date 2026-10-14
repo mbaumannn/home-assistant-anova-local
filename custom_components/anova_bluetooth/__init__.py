@@ -1,4 +1,4 @@
-"""Setup van de Anova Bluetooth-integratie."""
+"""Set up the Anova Bluetooth integration."""
 from __future__ import annotations
 
 from homeassistant.components import bluetooth
@@ -30,13 +30,13 @@ PLATFORMS: list[Platform] = [
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     address: str | None = entry.unique_id
     if address is None:
-        raise ConfigEntryNotReady("geen MAC-adres")
+        raise ConfigEntryNotReady("no MAC address")
 
     device = bluetooth.async_ble_device_from_address(
         hass, address.upper(), connectable=True
     )
     if device is None:
-        raise ConfigEntryNotReady(f"Anova {address} niet in bereik")
+        raise ConfigEntryNotReady(f"Anova {address} not in range")
 
     client = AnovaBLE(ble_device=device)
 
@@ -58,7 +58,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     coordinator = AnovaDataUpdateCoordinator(hass, entry, client)
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
 
-    # Sluit de BLE-verbinding altijd netjes (unload én mislukte setup).
+    # Always close the BLE connection cleanly (unload and failed setup).
     entry.async_on_unload(client.disconnect)
 
     try:
@@ -78,8 +78,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if unloaded:
         coordinator = hass.data[DOMAIN].pop(entry.entry_id, None)
         if coordinator is not None:
-            # Sluit de BLE-verbinding expliciet af: het toestel staat maar één
-            # verbinding toe, dus een reload moet de oude eerst loslaten.
+            # Close the BLE connection explicitly: the cooker allows only one
+            # connection, so a reload must release the previous one first.
             await coordinator.client.disconnect()
     return unloaded
 

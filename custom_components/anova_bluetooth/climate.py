@@ -1,4 +1,4 @@
-"""Climate-entiteit voor de Anova."""
+"""Climate entity for the Anova."""
 from __future__ import annotations
 
 from homeassistant.components.climate import (
@@ -26,7 +26,7 @@ async def async_setup_entry(
 
 
 class AnovaClimate(AnovaEntity, ClimateEntity):
-    """Climate-entiteit (off/heat, doeltemperatuur, huidige temperatuur)."""
+    """Climate entity (off/heat, target temperature, current temperature)."""
 
     _attr_name = None
     _attr_hvac_modes = [HVACMode.OFF, HVACMode.HEAT]

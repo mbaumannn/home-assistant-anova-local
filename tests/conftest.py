@@ -1,4 +1,4 @@
-"""Zorg dat de component-modules importeerbaar zijn in tests (zonder HA)."""
+"""Make the component modules importable in tests (without Home Assistant)."""
 from __future__ import annotations
 
 import sys
@@ -9,8 +9,8 @@ COMPONENT_DIR = (
     Path(__file__).resolve().parent.parent / "custom_components" / "anova_bluetooth"
 )
 
-# Synthetische package zodat relatieve imports (from .const import …) werken
-# zonder de echte __init__.py (en dus Home Assistant) te importeren.
+# Synthetic package so relative imports (from .const import ...) work without
+# importing the real __init__.py (and therefore Home Assistant).
 _pkg = types.ModuleType("anova_bluetooth")
 _pkg.__path__ = [str(COMPONENT_DIR)]
 sys.modules["anova_bluetooth"] = _pkg

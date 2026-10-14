@@ -1,4 +1,4 @@
-"""Test de command-framing en state-assemblage met een fake BLE-transport."""
+"""Test command framing and state assembly with a fake BLE transport."""
 from __future__ import annotations
 
 import pytest
@@ -8,7 +8,7 @@ from anova_bluetooth.const import AnovaStatus, AnovaUnit
 
 
 class FakeClient:
-    """Vervangt BleakClient: registreert writes en stuurt een canned antwoord."""
+    """Replaces BleakClient: records writes and returns a canned answer."""
 
     def __init__(self, responses: dict[str, str]):
         self._responses = responses
@@ -81,7 +81,7 @@ async def test_set_timer_and_timer_control(fake):
 
 
 class FragmentClient(FakeClient):
-    """Splitst het antwoord in twee notifications (gefragmenteerd frame)."""
+    """Splits the answer into two notifications (fragmented frame)."""
 
     async def write_gatt_char(self, _uuid, data, response=False):
         self.writes.append(bytes(data))
@@ -94,7 +94,7 @@ class FragmentClient(FakeClient):
 
 
 class SilentClient(FakeClient):
-    """Schrijft wel, maar stuurt nooit een antwoord (forceert een timeout)."""
+    """Writes but never sends an answer (forces a timeout)."""
 
     async def write_gatt_char(self, _uuid, data, response=False):
         self.writes.append(bytes(data))
@@ -124,7 +124,7 @@ async def test_timeout_disconnects_and_reconnects(monkeypatch):
     with pytest.raises(anova_client.AnovaCommandError):
         await anova.set_temp(50.0)
 
-    assert created[0].is_connected is False  # verbinding gesloten na timeout
+    assert created[0].is_connected is False  # connection closed after timeout
     assert anova._client is None
-    await anova.set_temp(51.0)               # volgende commando verbindt opnieuw
+    await anova.set_temp(51.0)               # next command reconnects
     assert len(created) == 2

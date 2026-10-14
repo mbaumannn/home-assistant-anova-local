@@ -1,4 +1,4 @@
-"""Number-entiteit: bewaarde kookduur-preset in minuten."""
+"""Number entity: stored cook-duration preset in minutes."""
 from __future__ import annotations
 
 from homeassistant.components.number import NumberEntity, NumberMode
@@ -23,13 +23,13 @@ async def async_setup_entry(
 
 
 class AnovaDuration(AnovaEntity, RestoreEntity, NumberEntity):
-    """Bewaarde duur-preset voor de volgende sessie (schrijft `set timer`).
+    """Stored duration preset for the next session (writes ``set timer``).
 
-    Bewust NIET de live aftelling (dat is `sensor.anova_timer_resterend`): de
-    preset blijft staan tijdens het koken en overleeft een herstart.
+    This is deliberately not the live countdown (that is the timer remaining
+    sensor): the preset stays put during a cook and survives a restart.
     """
 
-    _attr_name = "Kookduur"
+    _attr_name = "Cook duration"
     _attr_icon = "mdi:timer-outline"
     _attr_native_min_value = 0
     _attr_native_max_value = 6000

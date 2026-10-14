@@ -1,4 +1,4 @@
-"""Config flow: bluetooth-discovery + handmatige MAC-invoer."""
+"""Config flow: Bluetooth discovery plus manual MAC entry."""
 from __future__ import annotations
 
 import voluptuous as vol
@@ -14,7 +14,7 @@ from .const import DOMAIN, NAME
 
 
 class AnovaBluetoothConfigFlow(ConfigFlow, domain=DOMAIN):
-    """Config flow voor Anova Bluetooth."""
+    """Config flow for Anova Bluetooth."""
 
     VERSION = 1
 

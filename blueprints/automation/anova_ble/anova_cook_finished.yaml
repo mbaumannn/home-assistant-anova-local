@@ -1,22 +1,23 @@
 blueprint:
-  name: Anova — klaar met koken
+  name: Anova cook finished
   description: >
-    Meldt wanneer de Anova-timer afloopt (voltooid). Stopt de timer met nog tijd
-    over, dan is het een annulering en wordt er niet gemeld.
+    Notifies when the Anova timer runs out, meaning the cook is done. If the
+    timer is stopped while time remains, it is treated as a cancellation and no
+    notification is sent.
   domain: automation
   input:
     timer_switch:
-      name: Anova timer-schakelaar
+      name: Anova timer switch
       selector:
         entity:
           domain: switch
     remaining_sensor:
-      name: Anova timer resterend
+      name: Anova timer remaining
       selector:
         entity:
           domain: sensor
     notify_target:
-      name: Melding naar
+      name: Notify target
       selector:
         target:
           entity:
@@ -40,6 +41,6 @@ action:
     target: !input notify_target
     data:
       title: "Anova"
-      message: "Je sous-vide is klaar 🍳"
+      message: "Sous-vide is done."
 
 mode: single

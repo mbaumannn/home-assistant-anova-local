@@ -1,4 +1,4 @@
-"""DataUpdateCoordinator voor de Anova."""
+"""DataUpdateCoordinator for the Anova."""
 from __future__ import annotations
 
 from datetime import timedelta
@@ -15,7 +15,7 @@ from .const import DOMAIN, LOGGER
 
 
 class AnovaDataUpdateCoordinator(DataUpdateCoordinator[AnovaState]):
-    """Pollt de Anova en verbindt on-demand."""
+    """Polls the Anova and connects on demand."""
 
     def __init__(
         self,
