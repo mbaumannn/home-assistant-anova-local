@@ -129,6 +129,7 @@ console.log("RESULT " + JSON.stringify({
   inputValue: at(".val-input").value,
   startDisabled: at(".start").disabled,
   stopDisabled: at(".stop").disabled,
+  sliderDisabled: slider.disabled,
   sliderValue: slider.value,
   sliderMin: slider.min,
   sliderMax: slider.max,
@@ -444,6 +445,21 @@ def test_escape_leaves_the_temperature_alone() -> None:
     )
     assert out["calls"] == []
     assert out["bigInputHidden"] is True
+
+
+def test_an_unreachable_cooker_says_so_and_refuses_to_act() -> None:
+    """The cooker being off must not leave the last reading on screen."""
+    out = render(states(status="unavailable"))
+    assert out["state"] == "Unavailable"
+    assert out["center"] == "—"                          # no stale temperature
+    assert out["cur"] == ""
+    assert out["secondaryHidden"] is True
+    assert out["valueHtml"] == "—"                       # and no stale timer either
+    assert out["accent"] == "var(--disabled-text-color, var(--secondary-text-color))"
+    assert out["sliderDisabled"] is True                 # nothing to drag
+    assert out["minusVisibility"] == "hidden"
+    assert out["startDisabled"] is True
+    assert out["stopDisabled"] is True
 
 
 def test_without_a_climate_entity_the_ring_is_the_duration_dial() -> None:

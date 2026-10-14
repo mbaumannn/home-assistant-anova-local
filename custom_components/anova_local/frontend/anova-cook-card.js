@@ -485,7 +485,10 @@ class AnovaCookCard extends HTMLElement {
       clearTimeout(this._timer);
       this._pending = null;
     }
-    const cooking = this._pending === "start" || status === "cooking";
+    // No reading: say so instead of showing the last one. The cooker is switched off
+    // or out of reach, and a stale temperature is worse than no temperature.
+    const unreachable = status === undefined || status === "unknown" || status === "unavailable";
+    const cooking = !unreachable && (this._pending === "start" || status === "cooking");
     this._cooking = cooking;
     // The ring is the target temperature whenever we know it: setting it before a
     // cook is the whole point. Without a climate entity it falls back to being the
@@ -497,12 +500,14 @@ class AnovaCookCard extends HTMLElement {
       climate.friendly_name || "Anova Cooker";
 
     // Blue while you are setting up, the heat colour while it works, warning when
-    // something is wrong: the same colours Home Assistant's own card uses.
-    const accent = low
-      ? "var(--warning-color, #ffa600)"
-      : cooking
-        ? "var(--state-climate-heat-color, #ff6f22)"
-        : "var(--primary-color)";
+    // something is wrong, and a neutral grey when the cooker cannot be reached.
+    const accent = unreachable
+      ? "var(--disabled-text-color, var(--secondary-text-color))"
+      : low
+        ? "var(--warning-color, #ffa600)"
+        : cooking
+          ? "var(--state-climate-heat-color, #ff6f22)"
+          : "var(--primary-color)";
 
     this._suppressSlider = true;
     if (!this._dragging) {                         // never fight a finger on the dial
@@ -522,13 +527,15 @@ class AnovaCookCard extends HTMLElement {
         this._slider.current = undefined;
       }
     }
-    this._slider.disabled = false; // drag to change the temperature mid-cook too
+    this._slider.disabled = unreachable;           // nothing to drag when it is gone
     this._slider.style.setProperty("--control-circular-slider-color", accent);
     this._suppressSlider = false;
 
     // The state in words, in the middle of the ring, like the card it replaces.
     let stateText = "Off";
-    if (low) {
+    if (unreachable) {
+      stateText = "Unavailable";
+    } else if (low) {
       stateText = "Low water";
     } else if (cooking) {
       const reached = hasCurrent && hasTarget && current >= target - 0.5;
@@ -541,16 +548,20 @@ class AnovaCookCard extends HTMLElement {
     const cur = root.querySelector(".cur");
     const sr = root.querySelector(".sr");
     const stateEl = root.querySelector(".state");
-    if (ringIsTemperature) {
+    if (ringIsTemperature && !unreachable) {
       big.innerHTML = this._bigNumberHtml(target, unit);
       cur.textContent = hasCurrent ? `${this._short(current)} ${unit}` : "";
       sr.textContent = `${stateText} ${this._short(target)} ${unit}`.trim();
+    } else if (unreachable) {
+      big.innerHTML = "—";
+      cur.textContent = "";
+      sr.textContent = stateText;
     } else {
       big.innerHTML = `${duration}<span class="unit">min</span>`;
       cur.textContent = "";
       sr.textContent = `${stateText} ${duration} min`.trim();
     }
-    root.querySelector(".label.secondary").hidden = !hasCurrent || !ringIsTemperature;
+    root.querySelector(".label.secondary").hidden = unreachable || !hasCurrent || !ringIsTemperature;
     stateEl.textContent = stateText;
     stateEl.classList.toggle("warn", low);
 
@@ -568,19 +579,20 @@ class AnovaCookCard extends HTMLElement {
       fill.style.width = `${fraction * 100}%`;
       bar.style.background = "var(--divider-color)";
     } else {
-      val.innerHTML = `${duration}<small> min</small>`;
+      val.innerHTML = unreachable ? "—" : `${duration}<small> min</small>`;
       fill.style.width = "0%";
       bar.style.background = "transparent";          // holds the space, not the eye
     }
     fill.style.background = accent;
     // The buttons step aside while cooking but keep their place, so the row — and
     // with it the spacing between the ring and the timer — is the same in both states.
-    if (this._minus) this._minus.style.visibility = cooking ? "hidden" : "";
-    if (this._plus) this._plus.style.visibility = cooking ? "hidden" : "";
+    const stepsAway = cooking || unreachable;
+    if (this._minus) this._minus.style.visibility = stepsAway ? "hidden" : "";
+    if (this._plus) this._plus.style.visibility = stepsAway ? "hidden" : "";
     root.querySelector(".dur").hidden = false;
 
-    root.querySelector(".start").disabled = low || cooking;
-    root.querySelector(".stop").disabled = !cooking;
+    root.querySelector(".start").disabled = unreachable || low || cooking;
+    root.querySelector(".stop").disabled = unreachable || !cooking;
   }
 }
 
