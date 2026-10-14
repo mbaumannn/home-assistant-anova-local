@@ -1,10 +1,13 @@
 /**
  * Anova Cook Card
  *
- * A compact sous-vide cook card for the Anova Bluetooth integration:
- * a countdown ring with the duration stepper and Start/Stop, plus a low-water
- * warning. Registered automatically by the integration, so no extra frontend
- * cards are required.
+ * A vertically laid out sous-vide cook card for the Anova Bluetooth
+ * integration: a countdown ring on top, the duration stepper and Start/Stop
+ * below, plus a low-water warning. Laid out vertically so it pairs with the
+ * thermostat card at an equal height.
+ *
+ * Registered automatically by the integration, so no extra frontend cards are
+ * required.
  *
  * Config:
  *   type: custom:anova-cook-card
@@ -27,7 +30,7 @@ const DEFAULTS = {
   low_water: "binary_sensor.anova_bluetooth_low_water",
 };
 
-const RING_RADIUS = 52;
+const RING_RADIUS = 54;
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
 
 class AnovaCookCard extends HTMLElement {
@@ -49,7 +52,7 @@ class AnovaCookCard extends HTMLElement {
   }
 
   getCardSize() {
-    return 4;
+    return 5;
   }
 
   _id(kind) {
@@ -64,38 +67,44 @@ class AnovaCookCard extends HTMLElement {
   _build() {
     this.shadowRoot.innerHTML = `
       <style>
-        ha-card { padding: 16px; }
-        .wrap { display: flex; gap: 18px; align-items: center; }
-        .ring { position: relative; width: 150px; height: 150px; flex: 0 0 auto; }
-        .ring svg { width: 150px; height: 150px; transform: rotate(-90deg); }
+        :host { display: block; height: 100%; }
+        ha-card { height: 100%; box-sizing: border-box; }
+        .wrap {
+          height: 100%; box-sizing: border-box;
+          display: flex; flex-direction: column;
+          align-items: center; justify-content: center;
+          gap: 16px; padding: 16px;
+        }
+        .ring { position: relative; width: 168px; height: 168px; flex: 0 0 auto; }
+        .ring svg { width: 168px; height: 168px; transform: rotate(-90deg); }
         .ring .track { fill: none; stroke: var(--secondary-background-color); stroke-width: 12; }
         .ring .prog { fill: none; stroke: var(--primary-color); stroke-width: 12;
                       stroke-linecap: round; transition: stroke-dashoffset .6s ease; }
-        .ring ha-card.low .prog { stroke: var(--warning-color, #e08a00); }
+        .ring.low .prog { stroke: var(--warning-color, #e08a00); }
         .center { position: absolute; inset: 0; display: flex; flex-direction: column;
-                  align-items: center; justify-content: center; gap: 1px; }
-        .big { font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; }
-        .cap { font-size: 11px; color: var(--secondary-text-color); }
-        .ctrl { flex: 1; display: flex; flex-direction: column; gap: 12px; }
-        .dur { display: flex; align-items: center; gap: 10px; }
-        .dur .label { flex: 1; color: var(--secondary-text-color); font-size: 13px; }
-        .step { width: 38px; height: 38px; border-radius: 12px; border: 1px solid var(--divider-color);
+                  align-items: center; justify-content: center; gap: 2px; }
+        .big { font-size: 30px; font-weight: 600; font-variant-numeric: tabular-nums;
+               line-height: 1; }
+        .cap { font-size: 12px; color: var(--secondary-text-color); }
+        .dur { display: flex; align-items: center; gap: 14px; }
+        .dur .label { color: var(--secondary-text-color); font-size: 13px; }
+        .step { width: 40px; height: 40px; border-radius: 12px;
+                border: 1px solid var(--divider-color);
                 background: var(--card-background-color); color: var(--primary-text-color);
-                font-size: 19px; cursor: pointer; }
-        .val { min-width: 62px; text-align: center; font-size: 19px; font-weight: 600;
+                font-size: 20px; cursor: pointer; line-height: 1; }
+        .val { min-width: 74px; text-align: center; font-size: 20px; font-weight: 600;
                font-variant-numeric: tabular-nums; }
-        .btns { display: flex; gap: 10px; }
-        button.act { flex: 1; height: 44px; border-radius: 22px; border: none; cursor: pointer;
+        .btns { display: flex; gap: 10px; width: 100%; max-width: 320px; }
+        button.act { flex: 1; height: 46px; border-radius: 23px; border: none; cursor: pointer;
                      font-size: 15px; font-weight: 600; }
-        button.act:disabled { opacity: .45; cursor: default; }
+        button.act:disabled { opacity: .4; cursor: default; }
         .start { background: var(--primary-color); color: var(--text-primary-color, #fff); }
         .stop { background: transparent; color: var(--primary-text-color);
                 border: 1px solid var(--divider-color) !important; }
-        .chip { align-self: flex-start; font-size: 12px; padding: 3px 10px; border-radius: 999px;
+        .chip { font-size: 12px; padding: 3px 12px; border-radius: 999px;
                 background: var(--secondary-background-color); color: var(--secondary-text-color); }
         .chip.good { background: rgba(46,158,91,.15); color: #2e9e5b; }
         .chip.warn { background: rgba(224,138,0,.15); color: #c47a00; }
-        .billow { color: var(--secondary-text-color); font-size: 12px; }
       </style>
       <ha-card>
         <div class="wrap">
@@ -108,19 +117,16 @@ class AnovaCookCard extends HTMLElement {
             </svg>
             <div class="center"><div class="big"></div><div class="cap"></div></div>
           </div>
-          <div class="ctrl">
-            <div class="dur">
-              <span class="label">Duur</span>
-              <button class="step minus" aria-label="minder">−</button>
-              <span class="val"></span>
-              <button class="step plus" aria-label="meer">＋</button>
-            </div>
-            <div class="btns">
-              <button class="act start">Start cook</button>
-              <button class="act stop">Stop</button>
-            </div>
-            <div class="chips"></div>
+          <div class="dur">
+            <button class="step minus" aria-label="minder">−</button>
+            <span class="val"></span>
+            <button class="step plus" aria-label="meer">＋</button>
           </div>
+          <div class="btns">
+            <button class="act start">Start cook</button>
+            <button class="act stop">Stop</button>
+          </div>
+          <div class="chip idle">idle</div>
         </div>
       </ha-card>
     `;
@@ -177,6 +183,7 @@ class AnovaCookCard extends HTMLElement {
     root.querySelector(".prog").style.strokeDashoffset = String(
       RING_CIRCUMFERENCE * (1 - pct)
     );
+    root.querySelector(".ring").classList.toggle("low", low);
 
     root.querySelector(".big").textContent = cooking ? `${remaining} min` : "Start";
     root.querySelector(".cap").textContent = cooking
@@ -189,13 +196,13 @@ class AnovaCookCard extends HTMLElement {
     startBtn.disabled = low || cooking;
     stopBtn.disabled = !cooking;
 
-    const chips = root.querySelector(".chips");
-    chips.innerHTML = low
-      ? '<span class="chip warn">low water: vul water bij</span>'
+    const chip = root.querySelector(".chip");
+    chip.textContent = low
+      ? "low water: vul water bij"
       : cooking
-        ? '<span class="chip good">cooking</span>'
-        : '<span class="chip">idle</span>';
-    root.querySelector("ha-card").classList.toggle("low", low);
+        ? "cooking"
+        : "idle";
+    chip.className = `chip ${low ? "warn" : cooking ? "good" : "idle"}`;
   }
 }
 
