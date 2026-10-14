@@ -19,6 +19,12 @@ COMMAND_TERMINATOR = "\r"
 COMMAND_TIMEOUT = 10.0
 NOTIFY_TIMEOUT = 10.0
 WRITE_TIMEOUT = 10.0
+# Action commands such as `start time` are accepted silently by the cooker
+# (no notification). We still wait briefly to catch a reply if one arrives.
+REPLY_SETTLE = 0.5
+# The cooker needs a moment after a fresh connection before it accepts a
+# notification subscription and answers commands.
+POST_CONNECT_SETTLE = 1.0
 
 # Read commands
 CMD_STATUS = "status"

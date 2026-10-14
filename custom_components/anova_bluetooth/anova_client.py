@@ -28,6 +28,8 @@ from .const import (
     COMMAND_TERMINATOR,
     COMMAND_TIMEOUT,
     NOTIFY_TIMEOUT,
+    POST_CONNECT_SETTLE,
+    REPLY_SETTLE,
     WRITE_TIMEOUT,
     LOGGER,
     DEVICE_NAME,
@@ -122,6 +124,14 @@ class AnovaBLE:
         except Exception as err:  # noqa: BLE001
             self._client = None
             raise AnovaConnectionError(str(err)) from err
+        # The cooker drops the first command right after a fresh connection,
+        # so give it a moment before subscribing and writing.
+        if POST_CONNECT_SETTLE:
+            try:
+                await asyncio.sleep(POST_CONNECT_SETTLE)
+            except BaseException:
+                await self._async_disconnect_locked()
+                raise
         return self._client
 
     async def connect(self) -> None:
@@ -145,7 +155,7 @@ class AnovaBLE:
         async with self._cmd_lock:
             await self._async_disconnect_locked()
 
-    async def _command(self, command: str) -> str:
+    async def _command(self, command: str, *, expect_reply: bool = True) -> str:
         queue: asyncio.Queue[bytes] = asyncio.Queue()
 
         async def _cb(_char, data: bytearray) -> None:
@@ -164,11 +174,19 @@ class AnovaBLE:
                     await client.start_notify(CHAR_UUID, _cb)
                 async with asyncio.timeout(WRITE_TIMEOUT):
                     await client.write_gatt_char(CHAR_UUID, payload, response=False)
-                async with asyncio.timeout(COMMAND_TIMEOUT):
-                    # Frame on the terminator: an answer may arrive over
-                    # multiple notifications (fragmented).
-                    while COMMAND_TERMINATOR.encode() not in buffer:
-                        buffer.extend(await queue.get())
+                reply_timeout = COMMAND_TIMEOUT if expect_reply else REPLY_SETTLE
+                try:
+                    async with asyncio.timeout(reply_timeout):
+                        # Frame on the terminator: an answer may arrive over
+                        # multiple notifications (fragmented).
+                        while COMMAND_TERMINATOR.encode() not in buffer:
+                            buffer.extend(await queue.get())
+                except TimeoutError:
+                    if expect_reply:
+                        raise
+                    # Action commands such as `start time` are accepted by the
+                    # cooker without a reply.
+                    LOGGER.debug("Anova %r: no reply (action command)", command)
             except TimeoutError as err:
                 # Drop the connection so a late reply cannot land on the next
                 # command.
@@ -211,13 +229,15 @@ class AnovaBLE:
         await self._command(CMD_SET_UNIT.format(unit=unit.value))
 
     async def start(self) -> None:
-        await self._command(CMD_START)
+        # `start` may be accepted by the cooker without a reply.
+        await self._command(CMD_START, expect_reply=False)
 
     async def stop(self) -> None:
         await self._command(CMD_STOP)
 
     async def start_timer(self) -> None:
-        await self._command(CMD_START_TIMER)
+        # `start time` is accepted by the cooker without a reply.
+        await self._command(CMD_START_TIMER, expect_reply=False)
 
     async def stop_timer(self) -> None:
         await self._command(CMD_STOP_TIMER)

@@ -108,6 +108,12 @@ async def _setup(
         fake_establish,
     )
     monkeypatch.setattr(
+        "custom_components.anova_bluetooth.anova_client.POST_CONNECT_SETTLE", 0
+    )
+    monkeypatch.setattr(
+        "custom_components.anova_bluetooth.anova_client.REPLY_SETTLE", 0
+    )
+    monkeypatch.setattr(
         "homeassistant.components.bluetooth.async_ble_device_from_address",
         fake_lookup,
     )
