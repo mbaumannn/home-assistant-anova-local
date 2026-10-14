@@ -58,8 +58,8 @@ const root = {
     return nodes.get(selector);
   },
 };
-// The markup starts these hidden; a stub cannot parse HTML, so say so.
-for (const selector of [".val-input", ".bar"]) {
+// The markup starts these hidden (mirror it exactly: a stub cannot parse HTML).
+for (const selector of [".val-input", ".big-input"]) {
   nodes.set(selector, Object.assign(makeElement(), { hidden: true }));
 }
 globalThis.HTMLElement = class {
@@ -92,6 +92,12 @@ if (drag !== null) {
   slider.listeners["value-changed"]({ detail: { value: drag } });
 }
 __ACTIONS__
+// What is on screen right after the interaction, before any later state update.
+const immediate = {
+  value: slider.value,
+  center: at(".big").innerHTML,
+  between: at(".val").innerHTML,
+};
 // Each extra state is a later Home Assistant update: the trail shows what the
 // dial did in response, which is how "does it jump?" is answered.
 const trail = [];
@@ -109,12 +115,15 @@ console.log("RESULT " + JSON.stringify({
   sr: at(".sr").textContent,
   accent: slider.styleProps["--control-circular-slider-color"],
   markerCurrent: slider.current === undefined ? null : slider.current,
-  barHidden: at(".bar").hidden,
-  barWidth: at(".fill").style.width,
+  barBackground: at(".bar").style.background,
+  fillWidth: at(".fill").style.width,
   barColor: at(".fill").style.background,
+  bigHidden: at(".big").hidden,
+  bigInputHidden: at(".big-input").hidden,
+  bigInputValue: at(".big-input").value,
   valueHtml: at(".val").innerHTML,
-  minusHidden: at(".minus").hidden,
-  plusHidden: at(".plus").hidden,
+  minusVisibility: at(".minus").style.visibility,
+  plusVisibility: at(".plus").style.visibility,
   valHidden: at(".val").hidden,
   inputHidden: at(".val-input").hidden,
   inputValue: at(".val-input").value,
@@ -125,6 +134,7 @@ console.log("RESULT " + JSON.stringify({
   sliderMax: slider.max,
   calls: calls,
   trail: trail,
+  immediate: immediate,
 }));
 """
 
@@ -205,9 +215,10 @@ def test_off_is_blue_and_shows_the_target_with_the_water_temperature() -> None:
     assert out["secondaryHidden"] is False
     assert out["accent"] == "var(--primary-color)"          # blue while setting up
     assert out["markerCurrent"] == 24.5                     # Home Assistant's dial draws the dot
-    assert out["barHidden"] is True
+    assert out["barBackground"] == "transparent"   # holds the space, not the eye
+    assert out["fillWidth"] == "0%"
     assert out["valueHtml"] == "60<small> min</small>"
-    assert out["minusHidden"] is False
+    assert out["minusVisibility"] == ""
     assert out["sliderValue"] == 36.0
     assert (out["sliderMin"], out["sliderMax"]) == (26.0, 46.0)
     assert out["startDisabled"] is False
@@ -226,10 +237,10 @@ def test_heating_is_orange_and_counts_down_between_minus_and_plus() -> None:
     assert out["accent"] == "var(--state-climate-heat-color, #ff6f22)"   # orange while it works
     assert out["barColor"] == "var(--state-climate-heat-color, #ff6f22)"
     assert out["valueHtml"] == "26<small> min</small>"      # the countdown, where the
-    assert out["minusHidden"] is True                      # preset sits when off
-    assert out["plusHidden"] is True
-    assert out["barHidden"] is False
-    assert 40 < float(out["barWidth"].rstrip("%")) < 45
+    assert out["minusVisibility"] == "hidden"               # step aside, keep their place
+    assert out["plusVisibility"] == "hidden"
+    assert out["barBackground"] == "var(--divider-color)"
+    assert 40 < float(out["fillWidth"].rstrip("%")) < 45
     assert out["markerCurrent"] == 24.5                    # the marker stays visible
     assert out["startDisabled"] is True
     assert out["stopDisabled"] is False
@@ -264,7 +275,7 @@ def test_the_temperature_can_still_be_changed_mid_cook() -> None:
 def test_a_cook_without_a_timer_says_so() -> None:
     out = render(states(status="cooking", remaining=0, duration=0))
     assert out["valueHtml"] == "no timer"
-    assert out["barHidden"] is True
+    assert out["fillWidth"] == "0%"
 
 
 def test_dragging_the_temperature_does_not_recentre_the_ring() -> None:
@@ -348,13 +359,100 @@ def test_the_preset_cannot_be_typed_over_mid_cook() -> None:
     assert out["inputHidden"] is True
 
 
+def test_a_dragged_temperature_shows_at_once_and_survives_a_late_state_update() -> None:
+    """The complaint from real use: the reading lagged behind the finger.
+
+    Dragging asks the cooker for a new temperature; the cooker answers on its next
+    poll, seconds later. Until then the card keeps showing what was asked for, and
+    once the cooker agrees the reported value takes over again.
+    """
+    out = render(
+        states(status="idle", target=36.0),
+        drag=57.0,
+        again=[
+            states(status="idle", target=36.0),   # the poll has not caught up yet
+            states(status="idle", target=57.0),   # the cooker agrees
+            states(status="idle", target=80.0),   # something else moves it later
+        ],
+    )
+    assert "<span>57</span>" in out["immediate"]["center"]   # at once, not after the poll
+    assert out["immediate"]["value"] == 57.0
+    assert out["calls"][0]["data"]["temperature"] == 57.0
+    assert [step["value"] for step in out["trail"]] == [57.0, 57.0, 80.0]
+    assert out["trail"][2] == {"min": 70.0, "max": 90.0, "value": 80.0}
+
+
+def test_a_stepped_duration_shows_at_once() -> None:
+    """A stepper that does not move until the next poll feels broken."""
+    out = render(
+        states(status="idle", duration=60),
+        actions='at(".plus").onclick();',
+        again=[states(status="idle", duration=60)],       # not caught up yet
+    )
+    assert out["calls"][0]["data"] == {"entity_id": "number.anova_cooker_cook_duration", "value": 65}
+    assert out["immediate"]["between"] == "65<small> min</small>"   # before the poll
+    assert out["trail"][0]["value"] == 36.0                # the dial is the temperature
+
+
+def test_tapping_the_temperature_opens_a_field_to_type_in() -> None:
+    out = render(states(status="idle", target=36.0), actions='at(".big").onclick();')
+    assert out["bigInputHidden"] is False
+    assert out["bigHidden"] is True
+    assert out["bigInputValue"] == "36"
+
+
+def test_typing_a_temperature_sets_it() -> None:
+    out = render(
+        states(status="idle", target=36.0),
+        actions=(
+            'at(".big").onclick();'
+            'at(".big-input").value = "57.5";'
+            'at(".big-input").onkeydown({ key: "Enter", preventDefault() {} });'
+        ),
+    )
+    assert out["calls"] == [
+        {
+            "domain": "climate",
+            "service": "set_temperature",
+            "data": {"entity_id": "climate.anova_cooker", "temperature": 57.5},
+        }
+    ]
+    assert out["bigInputHidden"] is True
+    assert out["bigHidden"] is False
+
+
+def test_the_temperature_can_be_typed_mid_cook_too() -> None:
+    out = render(
+        states(status="cooking", remaining=26, target=36.0),
+        actions=(
+            'at(".big").onclick();'
+            'at(".big-input").value = "58";'
+            'at(".big-input").onkeydown({ key: "Enter", preventDefault() {} });'
+        ),
+    )
+    assert out["calls"][0]["data"]["temperature"] == 58.0
+
+
+def test_escape_leaves_the_temperature_alone() -> None:
+    out = render(
+        states(status="idle", target=36.0),
+        actions=(
+            'at(".big").onclick();'
+            'at(".big-input").value = "99";'
+            'at(".big-input").onkeydown({ key: "Escape", preventDefault() {} });'
+        ),
+    )
+    assert out["calls"] == []
+    assert out["bigInputHidden"] is True
+
+
 def test_without_a_climate_entity_the_ring_is_the_duration_dial() -> None:
     """A partial entity set still works, and then dragging sets the duration."""
     out = render(states(status="idle", with_climate=False), drag=90)
-    assert out["center"] == "60<span class=\"unit\">min</span>"
+    assert out["immediate"]["center"] == "90<span class=\"unit\">min</span>"  # at once
     assert out["cur"] == ""
     assert out["secondaryHidden"] is True
     assert out["markerCurrent"] is None                   # no marker without a reading
-    assert out["sliderValue"] == 60
+    assert out["sliderValue"] == 90                       # the dial follows the drag at once
     assert out["calls"][0]["service"] == "set_value"
     assert out["calls"][0]["data"] == {"entity_id": "number.anova_cooker_cook_duration", "value": 90}
