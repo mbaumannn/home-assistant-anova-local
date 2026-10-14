@@ -204,13 +204,17 @@ class AnovaLocalServer:
         self,
         command: str,
         *,
-        expect_reply: bool = True,
+        expect_reply: bool | None = True,
         timeout: float | None = None,
     ) -> str:
-        """Send one command and return its reply.
+        """Send one command and return its reply, if it has one.
 
-        ``expect_reply=False`` is for commands the cooker accepts with silence
-        (``start time``): write, settle briefly, return an empty string.
+        ``expect_reply=True``: the cooker must answer (the reads and the ``set``
+        commands do). ``expect_reply=None``: an action the cooker answers with an
+        *event* or with nothing at all — ``start``, ``stop``, ``start time``,
+        ``stop time``, ``clear alarm`` — so silence is normal, not a failure, and
+        it must not count towards closing the link. ``expect_reply=False``: write
+        and settle, without even looking for a reply.
         """
         if not self.connected:
             raise AnovaOfflineError(f"the cooker is not connected (cannot send {command!r})")
@@ -226,14 +230,24 @@ class AnovaLocalServer:
                 self._drop_connection()
                 await self._drain_cleanup()
                 raise AnovaOfflineError(f"the write failed for {command!r}") from err
-            if not expect_reply:
+            if expect_reply is False:
                 await asyncio.sleep(self.timings.reply_settle)
                 self._drain_replies()
                 self._remember(command, "(accepted without a reply)")
                 return ""
+            window = timeout or (
+                self.timings.command if expect_reply is True else self.timings.reply_settle
+            )
             try:
-                reply = await asyncio.wait_for(self._replies.get(), timeout or self.timings.command)
+                reply = await asyncio.wait_for(self._replies.get(), window)
             except TimeoutError as err:
+                self._drain_replies()
+                if expect_reply is None:
+                    # Actions are answered with an event (which arrives through
+                    # on_event) or with nothing. Silence here is not a failure.
+                    LOGGER.debug("Anova: no reply to %r (an event may follow)", command)
+                    self._remember(command, "(no reply, an event may follow)")
+                    return ""
                 await self._drain_for(self.timings.drain)
                 self._misses += 1
                 self._remember(command, "(no reply)")
@@ -290,22 +304,24 @@ class AnovaLocalServer:
         await self.send(CMD_SET_UNIT.format(unit=unit.value))
 
     async def start(self) -> None:
-        await self.send(CMD_START)
+        # The cooker may echo "start" or answer with an event; none of the actions
+        # is guaranteed to send a reply.
+        await self.send(CMD_START, expect_reply=None)
 
     async def stop(self) -> None:
         """Stop heating: the transport call, not the server's own :meth:`close`."""
-        await self.send(CMD_STOP)
+        await self.send(CMD_STOP, expect_reply=None)
 
     async def start_timer(self) -> None:
         # `start time` is accepted by the cooker without a reply.
-        await self.send(CMD_START_TIMER, expect_reply=False)
+        await self.send(CMD_START_TIMER, expect_reply=None)
 
     async def stop_timer(self) -> None:
-        await self.send(CMD_STOP_TIMER)
+        await self.send(CMD_STOP_TIMER, expect_reply=None)
 
     async def silence(self) -> None:
         """Turn the cooker speaker off to silence an alarm."""
-        await self.send(CMD_SET_SPEAKER_OFF)
+        await self.send(CMD_SET_SPEAKER_OFF, expect_reply=None)
 
     async def start_cook(self) -> None:
         """Start a cook using the stored duration preset.
