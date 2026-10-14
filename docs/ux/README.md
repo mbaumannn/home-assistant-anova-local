@@ -1,57 +1,58 @@
-# Anova Bluetooth dashboard (B1)
+# Anova Bluetooth dashboard
 
-A minimal dashboard block for the Anova Bluetooth integration: a temperature
-dial (the standard thermostat card) plus one cook card with a countdown ring.
+The integration ships its own Lovelace card, `custom:anova-cook-card`, and
+registers it automatically. No extra frontend cards are needed.
 
-Only what you use while cooking is shown, and the low-water warning appears only
-while it is actually relevant.
+## Recommended layout
 
-## Files
+Put the thermostat card and the cook card in a built-in **grid card** with two
+columns. Both are then the same height on desktop, and the grid stacks them on
+mobile.
 
-- `b1-cook-card.yaml` — the cook card (paste into a dashboard).
-- `anova-cook-card-mockups.html` — a visual mockup of the three states
-  (idle, cooking, low water). Open it in a browser.
+```yaml
+type: grid
+columns: 2
+square: false
+cards:
+  - type: thermostat
+    entity: climate.anova_bluetooth
+  - type: custom:anova-cook-card
+```
 
-## Required HACS frontend cards
+Notes:
+- A `horizontal-stack` also equalises the height but does not stack on mobile.
+- A sections view does not give the two cards the same height; prefer the grid
+  card above.
 
-- `mushroom` — for the duration stepper.
-- `button-card` — for the countdown ring.
+## The card
 
-## How it behaves
+`custom:anova-cook-card`:
+- a countdown ring: tap Start to cook, Stop to stop;
+- a duration stepper (`number.anova_bluetooth_cook_duration`);
+- a status chip (idle / cooking);
+- a low-water warning, shown only while the alarm is on.
 
-- **Ring**: tap to start a cook (writes the duration, starts heating and the
-  countdown). Hold to stop.
-- **Duration stepper**: only visible while idle.
-- **Low-water warning**: only visible while the alarm is on; tap it to silence
-  the beeper. Starting is refused while the alarm is on.
+Start and Stop react immediately (optimistic), because the cooker is slow over
+BLE.
 
-## Install
+Entity ids can be overridden:
 
-1. Install the HACS cards above and reload the frontend.
-2. Edit the dashboard, add a card, choose **Manual** and paste the contents of
-   `b1-cook-card.yaml`. Or paste it into the raw dashboard config.
+```yaml
+type: custom:anova-cook-card
+entities:
+  start: button.anova_bluetooth_start_cook
+  stop: button.anova_bluetooth_stop_cook
+  duration: number.anova_bluetooth_cook_duration
+  remaining: sensor.anova_bluetooth_timer_remaining
+  status: sensor.anova_bluetooth_status
+  low_water: binary_sensor.anova_bluetooth_low_water
+```
 
 ## Entities to hide in the UI
 
-These exist but should not be on the dashboard:
+These exist but do not belong on the dashboard:
 
-- `switch.anova_bluetooth_timer` — cannot start a countdown on its own on this
-  firmware.
-- `sensor.anova_bluetooth_timer_remaining` and `sensor.anova_bluetooth_status` —
-  only used by the card, not shown as tiles.
-- `button.anova_bluetooth_silence_alarm` — only reachable from the warning.
-- `button.anova_bluetooth_start_cook` — the ring replaces it.
-
-Hide them per entity (Settings > Entities > your entity > Hide) or skip them on
-the dashboard.
-
-## Entities the card uses
-
-| Purpose | Entity |
-|---|---|
-| Countdown | `sensor.anova_bluetooth_timer_remaining` |
-| Duration | `number.anova_bluetooth_cook_duration` |
-| Start | `button.anova_bluetooth_start_cook` |
-| Stop | `climate.anova_bluetooth` (hvac_mode off) |
-| Low water | `binary_sensor.anova_bluetooth_low_water` |
-| Silence | `button.anova_bluetooth_silence_alarm` |
+- `switch.anova_bluetooth_timer` (cannot start a countdown on its own)
+- `sensor.anova_bluetooth_timer_remaining` and `sensor.anova_bluetooth_status`
+  (used by the card)
+- `button.anova_bluetooth_silence_alarm` (reachable from the low-water warning)
