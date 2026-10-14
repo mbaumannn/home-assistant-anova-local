@@ -40,7 +40,7 @@ class AnovaDuration(AnovaEntity, RestoreEntity, NumberEntity):
     def __init__(self, coordinator: AnovaDataUpdateCoordinator) -> None:
         super().__init__(coordinator)
         self._attr_unique_id = f"{coordinator.config_entry.unique_id}_duration"
-        self._preset: int = 0
+        self._preset: int = 60
 
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
@@ -48,7 +48,7 @@ class AnovaDuration(AnovaEntity, RestoreEntity, NumberEntity):
             try:
                 self._preset = int(float(last.state))
             except (TypeError, ValueError):
-                self._preset = 0
+                self._preset = 60
         # Share the restored preset with the rest of the integration.
         self.coordinator.client.duration_preset = self._preset
 

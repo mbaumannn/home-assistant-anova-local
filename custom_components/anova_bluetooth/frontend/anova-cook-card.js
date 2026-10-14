@@ -68,7 +68,7 @@ class AnovaCookCard extends HTMLElement {
                 display: flex; flex-direction: column; align-items: center;
                 gap: 8px; padding: 12px 16px 16px; }
         .title { font-size: 16px; font-weight: 500; color: var(--primary-text-color); }
-        .dial { position: relative; width: 320px; max-width: 100%; flex: 0 0 auto; }
+        .dial { position: relative; width: 100%; max-width: 100%; }
         ha-control-circular-slider { width: 100% !important; display: block; }
         .center { position: absolute; inset: 0; display: flex; flex-direction: column;
                   align-items: center; justify-content: center; gap: 2px;
