@@ -24,6 +24,20 @@ from custom_components.anova_local.const import (
 MAC = "<cooker BLE MAC, redacted>"
 ID_CARD = "f56-a814c163a33"
 
+# Creating the Wi-Fi entry makes Home Assistant set it up, and the local server
+# then binds a real socket, so these tests need real sockets.
+pytestmark = pytest.mark.usefixtures("socket_enabled")
+
+
+@pytest.fixture(autouse=True)
+async def _unload_entries(hass):
+    """Unload entries after each test, so the server stops listening again."""
+    yield
+    for entry in list(hass.config_entries.async_entries()):
+        if entry.domain == DOMAIN:
+            await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()
+
 
 class FakeBle:
     """Stands in for AnovaBLE: validation succeeds and onboarding answers ``ok``."""
@@ -109,7 +123,7 @@ async def test_the_network_step_creates_the_entry_and_forgets_the_password(
             {
                 CONF_SSID: "MyHomeWiFi",
                 CONF_PASSWORD: "correct-horse-42",
-                CONF_SERVER_HOST: "192.168.2.60",
+                CONF_SERVER_HOST: "127.0.0.1",
                 CONF_LISTEN_PORT: 8080,
             },
         )
@@ -117,7 +131,7 @@ async def test_the_network_step_creates_the_entry_and_forgets_the_password(
     assert result["type"] is FlowResultType.CREATE_ENTRY
     data = result["data"]
     assert data[CONF_TRANSPORT] == TRANSPORT_WIFI
-    assert data[CONF_SERVER_HOST] == "192.168.2.60"
+    assert data[CONF_SERVER_HOST] == "127.0.0.1"
     assert data[CONF_LISTEN_PORT] == 8080
     assert data[CONF_ID_CARD] == ID_CARD          # so the server can check who dialled in
     assert CONF_PASSWORD not in data              # used once, never stored
@@ -137,7 +151,7 @@ async def test_a_network_name_with_a_space_is_refused_before_anything_is_written
             {
                 CONF_SSID: "My Wifi",
                 CONF_PASSWORD: "correct-horse-42",
-                CONF_SERVER_HOST: "192.168.2.60",
+                CONF_SERVER_HOST: "127.0.0.1",
                 CONF_LISTEN_PORT: 8080,
             },
         )
@@ -157,7 +171,7 @@ async def test_a_failed_write_is_reported_with_a_next_step(hass, a_cooker_in_ran
             {
                 CONF_SSID: "MyHomeWiFi",
                 CONF_PASSWORD: "correct-horse-42",
-                CONF_SERVER_HOST: "192.168.2.60",
+                CONF_SERVER_HOST: "127.0.0.1",
                 CONF_LISTEN_PORT: 8080,
             },
         )
