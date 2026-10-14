@@ -69,21 +69,31 @@ globalThis.window = {};
 ASSERTIONS = """
 const card = new AnovaCookCard();
 card.setConfig({ max: 240, step: 5 });
-const calls = [];
-card.hass = {
-  states: __STATES__,
-  callService: (domain, service, data) => calls.push({ domain, service, data }),
-};
 const at = (selector) => {
   if (!nodes.has(selector)) nodes.set(selector, makeElement());
   return nodes.get(selector);
 };
+const calls = [];
+const slider = at("ha-control-circular-slider");
+const setHass = (states2) => {
+  card.hass = {
+    states: states2,
+    callService: (domain, service, data) => calls.push({ domain, service, data }),
+  };
+};
+setHass(__STATES__);
 const drag = __DRAG__;
 if (drag !== null) {
-  at("ha-control-circular-slider").listeners["value-changed"]({ detail: { value: drag } });
+  slider.listeners["value-changed"]({ detail: { value: drag } });
 }
 __ACTIONS__
-const slider = at("ha-control-circular-slider");
+// Each extra state is a later Home Assistant update: the trail shows what the
+// dial did in response, which is how "does it jump?" is answered.
+const trail = [];
+for (const next of __AGAIN__) {
+  setHass(next);
+  trail.push({ min: slider.min, max: slider.max, value: slider.value });
+}
 console.log("RESULT " + JSON.stringify({
   state: at(".state").textContent,
   warns: at(".state").classes.has("warn"),
@@ -103,6 +113,7 @@ console.log("RESULT " + JSON.stringify({
   sliderMin: slider.min,
   sliderMax: slider.max,
   calls: calls,
+  trail: trail,
 }));
 """
 
@@ -145,13 +156,19 @@ def states(
     return out
 
 
-def render(state: dict, drag: float | None = None, actions: str = "") -> dict:
+def render(
+    state: dict,
+    drag: float | None = None,
+    actions: str = "",
+    again: list[dict] | None = None,
+) -> dict:
     script = (
         STUBS
         + CARD.read_text()
         + ASSERTIONS.replace("__STATES__", json.dumps(state))
         .replace("__DRAG__", "null" if drag is None else json.dumps(drag))
         .replace("__ACTIONS__", actions)
+        .replace("__AGAIN__", json.dumps(again or []))
     )
     with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False) as handle:
         handle.write(script)
@@ -241,6 +258,33 @@ def test_a_cook_without_a_timer_says_so() -> None:
     assert out["left"] == "no timer"
     assert out["barHidden"] is True
     assert out["state"] == "Heating"
+
+
+def test_dragging_the_temperature_does_not_recentre_the_ring() -> None:
+    """The complaint from real use: after a drag the knob jumped back to the middle.
+
+    The dial used to be re-centred around the new target on every render, so the
+    knob always sat at 50%. The range now stays put as long as it contains the
+    target, which is what makes dragging feel like dragging.
+    """
+    out = render(states(status="idle", target=36.0), drag=40.0, again=[states(status="idle", target=40.0)])
+    assert out["calls"][0]["data"]["temperature"] == 40.0
+    assert out["trail"][0] == {"min": 26.0, "max": 46.0, "value": 40.0}   # not 30..50 / 50%
+
+
+def test_a_target_from_elsewhere_still_recentres_the_ring() -> None:
+    """An automation (or the cooker) can move the target outside the range."""
+    out = render(states(status="idle", target=36.0), again=[states(status="idle", target=80.0)])
+    assert out["trail"][0] == {"min": 70.0, "max": 90.0, "value": 80.0}
+
+
+def test_a_state_update_while_dragging_leaves_the_dial_alone() -> None:
+    out = render(
+        states(status="idle", target=36.0),
+        actions='slider.listeners["pointerdown"]();',
+        again=[states(status="idle", target=90.0)],
+    )
+    assert out["trail"][0] == {"min": 26.0, "max": 46.0, "value": 36.0}   # the finger wins
 
 
 def test_tapping_the_duration_opens_a_field_to_type_in() -> None:
