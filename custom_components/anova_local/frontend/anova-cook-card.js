@@ -6,13 +6,18 @@
  * thermostat card uses), so the ring looks and behaves like Home Assistant
  * already looks and behaves.
  *
- * The ring means one thing per state, and the countdown is never hidden:
+ * The ring is the target temperature, always: that is what you set before a cook
+ * and watch while it runs. The duration is set with the -/+ row while the cooker
+ * is off, and the countdown is never hidden:
  *
- *   Off      the ring is the duration dial. Drag it (or use -/+) to set it.
- *   Heating  the ring is the target temperature; the water temperature sits under
- *   Cooking  it. The remaining time is in the top right, with a progress bar
- *            underneath, so it stays visible while the ring shows temperature.
+ *   Off      the ring sets the target temperature; -/+ sets the duration.
+ *   Heating  the ring keeps setting the temperature; the water temperature sits
+ *   Cooking  under it and the remaining time is in the top right, with a progress
+ *            bar underneath, so it stays visible while the ring shows temperature.
  *   Low water the ring turns to the warning colour and Start is refused.
+ *
+ * If the climate entity is missing (a partial entity set), the ring falls back to
+ * being the duration dial.
  *
  * Registered automatically by the integration.
  *
@@ -107,7 +112,12 @@ class AnovaCookCard extends HTMLElement {
                 background: var(--card-background-color); color: var(--primary-text-color);
                 font-size: 22px; line-height: 1; cursor: pointer; }
         .val { min-width: 84px; text-align: center; font-size: 22px; font-weight: 500;
-               font-variant-numeric: tabular-nums; }
+               font-variant-numeric: tabular-nums; cursor: pointer; }
+        .val-input { width: 84px; min-width: 84px; text-align: center; font-size: 22px;
+                     font-weight: 500; font-variant-numeric: tabular-nums;
+                     background: transparent; color: var(--primary-text-color);
+                     border: none; border-bottom: 2px solid var(--primary-color);
+                     outline: none; padding: 0 0 2px; }
         .btns { display: flex; gap: 10px; width: 100%; }
         button.act { flex: 1; height: 44px; border-radius: 22px; border: none; cursor: pointer;
                      font-size: 15px; font-weight: 600; }
@@ -130,7 +140,10 @@ class AnovaCookCard extends HTMLElement {
           <div class="bar" hidden><div class="fill"></div></div>
           <div class="dur">
             <button class="step minus" aria-label="minder">−</button>
-            <span class="val"></span>
+            <span class="val" role="button" tabindex="0"
+                  title="Tap to type a number of minutes"></span>
+            <input class="val-input" type="number" inputmode="numeric" min="0" max="6000"
+                   step="1" hidden aria-label="minutes" />
             <button class="step plus" aria-label="meer">＋</button>
           </div>
           <div class="btns">
@@ -144,12 +157,83 @@ class AnovaCookCard extends HTMLElement {
     this._slider.addEventListener("value-changed", (ev) =>
       this._onSliderChanged(ev)
     );
-    this.shadowRoot.querySelector(".minus").onclick = () =>
-      this._stepBy(-this._stepSize());
-    this.shadowRoot.querySelector(".plus").onclick = () =>
-      this._stepBy(this._stepSize());
+
+    // The duration: tap the number to type one, or hold -/+ for the same field.
+    const value = this.shadowRoot.querySelector(".val");
+    value.onclick = () => this._openValueInput();
+    value.onkeydown = (ev) => {
+      if (ev.key === "Enter" || ev.key === " ") this._openValueInput();
+    };
+    const input = this.shadowRoot.querySelector(".val-input");
+    input.onkeydown = (ev) => {
+      if (ev.key === "Enter") {
+        ev.preventDefault();
+        this._commitValueInput();
+      } else if (ev.key === "Escape") {
+        ev.preventDefault();
+        this._closeValueInput();
+      }
+    };
+    input.onblur = () => this._commitValueInput();
+
+    const steps = [[".minus", -1], [".plus", 1]];
+    for (const [selector, direction] of steps) {
+      const button = this.shadowRoot.querySelector(selector);
+      let hold = null;
+      button.onpointerdown = () => {
+        hold = setTimeout(() => {
+          this._held = true;
+          this._openValueInput();
+        }, 500);
+      };
+      button.onpointerup = button.onpointerleave = () => clearTimeout(hold);
+      button.onclick = () => {
+        if (this._held) {
+          this._held = false; // the hold already opened the field
+          return;
+        }
+        this._stepBy(direction * this._stepSize());
+      };
+      button.oncontextmenu = (ev) => {
+        ev.preventDefault(); // long press on a phone, right click on a desktop
+        this._openValueInput();
+      };
+    }
+
     this.shadowRoot.querySelector(".start").onclick = () => this._start();
     this.shadowRoot.querySelector(".stop").onclick = () => this._stop();
+  }
+
+  _openValueInput() {
+    const input = this.shadowRoot.querySelector(".val-input");
+    const value = this.shadowRoot.querySelector(".val");
+    if (!input || !value || !input.hidden) return;
+    const minutes = Number(this._state(this._id("duration"))) || 0;
+    input.value = String(minutes);
+    input.hidden = false;
+    value.hidden = true;
+    input.focus();
+    if (input.select) input.select();
+  }
+
+  _commitValueInput() {
+    const input = this.shadowRoot.querySelector(".val-input");
+    const value = this.shadowRoot.querySelector(".val");
+    if (!input || input.hidden) return;
+    const typed = Number(input.value);
+    input.hidden = true;
+    value.hidden = false;
+    if (Number.isFinite(typed)) {
+      this._setDuration(Math.max(0, Math.min(6000, Math.round(typed))));
+    }
+  }
+
+  _closeValueInput() {
+    const input = this.shadowRoot.querySelector(".val-input");
+    const value = this.shadowRoot.querySelector(".val");
+    if (!input || input.hidden) return;
+    input.hidden = true;
+    value.hidden = false;
   }
 
   _stepSize() {
@@ -160,7 +244,7 @@ class AnovaCookCard extends HTMLElement {
     if (this._suppressSlider) return;
     const value = Number(ev.detail?.value);
     if (!Number.isFinite(value)) return;
-    if (this._cooking) {
+    if (this._ringIsTemperature) {
       this._setTemperature(value);
     } else {
       this._setDuration(Math.max(0, Math.round(value)));
@@ -228,9 +312,11 @@ class AnovaCookCard extends HTMLElement {
     }
     const cooking = this._pending === "start" || status === "cooking";
     this._cooking = cooking;
-
-    // The ring: duration while off, target temperature while cooking.
-    const ringIsTemperature = cooking && hasTarget;
+    // The ring is the target temperature whenever we know it: setting it before a
+    // cook is the whole point. Without a climate entity it falls back to the
+    // duration dial, so a partial entity set still works.
+    const ringIsTemperature = hasTarget;
+    this._ringIsTemperature = ringIsTemperature;   // the drag route reads this back
     this._suppressSlider = true;
     if (ringIsTemperature) {
       this._slider.min = Math.max(minTemp, target - TEMP_RANGE);
@@ -255,9 +341,9 @@ class AnovaCookCard extends HTMLElement {
     const cap = root.querySelector(".cap");
     if (ringIsTemperature) {
       big.innerHTML = `${target.toFixed(1)}<small> ${unit}</small>`;
-      cap.textContent = Number.isFinite(current)
+      cap.textContent = cooking && Number.isFinite(current)
         ? `water ${current.toFixed(1)} ${unit}`
-        : "set temperature";
+        : "target";
     } else {
       big.innerHTML = `${duration}<small> min</small>`;
       cap.textContent = "duration";
@@ -294,10 +380,10 @@ class AnovaCookCard extends HTMLElement {
       bar.hidden = true;
     }
 
-    // The stepper belongs to the duration dial, so it is hidden while the ring
-    // shows the temperature; Stop and Start stay put in both states.
+    // The stepper is the duration control while the cooker is off, and it is put
+    // away while cooking (the preset is not something to fiddle with mid-cook).
     const dur = root.querySelector(".dur");
-    dur.hidden = ringIsTemperature;
+    dur.hidden = cooking;
     root.querySelector(".val").textContent = `${duration} min`;
 
     root.querySelector(".start").disabled = low || cooking;
