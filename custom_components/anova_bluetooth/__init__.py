@@ -17,6 +17,7 @@ from homeassistant.exceptions import ConfigEntryNotReady
 from .anova_client import AnovaBLE
 from .const import DOMAIN
 from .coordinator import AnovaDataUpdateCoordinator
+from .util import format_ble_address
 
 PLATFORMS: list[Platform] = [
     Platform.CLIMATE,
@@ -28,12 +29,14 @@ PLATFORMS: list[Platform] = [
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    address: str | None = entry.unique_id
-    if address is None:
+    if entry.unique_id is None:
         raise ConfigEntryNotReady("no MAC address")
+    # Normalize to the uppercase form Home Assistant uses for Bluetooth
+    # advertisements, so the callback matcher and the device lookup match.
+    address = format_ble_address(entry.unique_id)
 
     device = bluetooth.async_ble_device_from_address(
-        hass, address.upper(), connectable=True
+        hass, address, connectable=True
     )
     if device is None:
         raise ConfigEntryNotReady(f"Anova {address} not in range")

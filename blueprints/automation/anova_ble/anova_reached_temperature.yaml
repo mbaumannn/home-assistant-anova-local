@@ -1,7 +1,9 @@
 blueprint:
   name: Anova reached temperature
   description: >
-    Notifies when the water reaches the target temperature during a cook.
+    Notifies when the water reaches the target temperature during a cook. The
+    notification is only sent while the cooker is actively heating and both
+    temperatures are valid numbers.
   domain: automation
   input:
     climate_entity:
@@ -16,18 +18,20 @@ blueprint:
           entity:
             domain: notify
 
-variables:
+# Trigger templates are evaluated before the automation variables are set, so
+# the selected climate entity is exposed to the trigger via trigger_variables.
+trigger_variables:
   anova: !input climate_entity
 
 trigger:
   - platform: template
     value_template: >
-      {% set c = anova %}
-      {{ states(c) not in ['unknown', 'unavailable']
-         and state_attr(c, 'hvac_mode') == 'heat'
-         and state_attr(c, 'current_temperature') is not none
-         and state_attr(c, 'target_temperature') is not none
-         and state_attr(c, 'current_temperature') >= state_attr(c, 'target_temperature') }}
+      {% set target = state_attr(anova, 'temperature') | float(none) %}
+      {% set current = state_attr(anova, 'current_temperature') | float(none) %}
+      {{ states(anova) == 'heat'
+         and target is not none
+         and current is not none
+         and current >= target }}
 
 action:
   - action: notify.send_message

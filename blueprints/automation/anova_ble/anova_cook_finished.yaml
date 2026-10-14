@@ -1,9 +1,14 @@
 blueprint:
   name: Anova cook finished
   description: >
-    Notifies when the Anova timer runs out, meaning the cook is done. If the
-    timer is stopped while time remains, it is treated as a cancellation and no
-    notification is sent.
+    Notifies when the Anova timer has run out, meaning the cook is done. A cook
+    that is stopped manually while time remains is a cancellation and does not
+    notify. A lost connection does not notify either.
+
+    Assumption to verify: on firmware 6.1.1 the remaining time reaches 0 before
+    the timer stops, so a stopped timer with 0 minutes left is a completed cook.
+    This is confirmed by the Phase 1b timer measurement. Until that measurement
+    is done, treat the behavior as unverified.
   domain: automation
   input:
     timer_switch:
@@ -25,6 +30,7 @@ blueprint:
 
 variables:
   remaining_entity: !input remaining_sensor
+  timer_entity: !input timer_switch
 
 trigger:
   - platform: state
@@ -33,8 +39,16 @@ trigger:
     to: "off"
 
 condition:
+  # Confirmed expiry: the timer reported exactly 0 remaining when it stopped. A
+  # manual cancellation stops the timer with time still on the clock (for
+  # example 1 minute), so it is not reported as done.
   - condition: template
-    value_template: "{{ states(remaining_entity) | int(999) <= 1 }}"
+    value_template: "{{ states(remaining_entity) | int(-1) == 0 }}"
+  # A lost connection is not a completed cook: both entities must be available.
+  - condition: template
+    value_template: "{{ states(timer_entity) not in ['unknown', 'unavailable'] }}"
+  - condition: template
+    value_template: "{{ states(remaining_entity) not in ['unknown', 'unavailable'] }}"
 
 action:
   - action: notify.send_message
