@@ -1,0 +1,18 @@
+This project contains test fixtures copied from other projects.
+
+tests/fixtures/anova_frames.csv
+    A verbatim copy of pkg/wifi/testdata/test_data.csv from Anova4All
+    (https://github.com/AlmogBaku/Anova4All), MIT licensed,
+    copyright (c) Almog Baku. It contains 115 frames captured from a real
+    cooker and its server, used here to verify the frame codec.
+
+Protocol knowledge was cross-checked against:
+
+- Anova4All, MIT, https://github.com/AlmogBaku/Anova4All
+- "Hacking My Sous Vide" and its protocol notes by TheUbuntuGuy,
+  https://gist.github.com/TheUbuntuGuy/225492a8dec816d49b70d9c21811e8b1
+- The BLE command set extracted from the Anova Android app v2.1.0 by
+  dfrankland/sous-vide, https://github.com/dfrankland/sous-vide
+
+This is an independent, community-maintained implementation. It is not
+affiliated with, endorsed by, or supported by Anova Applied Electronics, Inc.
