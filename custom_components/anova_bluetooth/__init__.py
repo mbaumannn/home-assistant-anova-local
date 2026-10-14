@@ -20,7 +20,7 @@ from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers.typing import ConfigType
 
 from .anova_client import AnovaBLE
-from .const import DOMAIN, VERSION
+from .const import DOMAIN, LOGGER, VERSION
 from .coordinator import AnovaDataUpdateCoordinator
 from .util import format_ble_address
 
@@ -50,7 +50,33 @@ async def _async_register_card(hass: HomeAssistant) -> None:
     hass.data[_CARD_FLAG] = True
     if "frontend" in hass.config.components:
         # Version query busts the browser cache when the card is updated.
-        add_extra_js_url(hass, f"{_CARD_URL}?v={VERSION}")
+        url = f"{_CARD_URL}?v={VERSION}"
+        add_extra_js_url(hass, url)
+        # A Lovelace resource is loaded before a dashboard renders, so the card
+        # is defined even when the extra module URL would arrive too late.
+        await _async_ensure_lovelace_resource(hass, url)
+
+
+async def _async_ensure_lovelace_resource(hass: HomeAssistant, url: str) -> None:
+    """Register the card as a Lovelace resource (best effort)."""
+    try:
+        from homeassistant.components.lovelace import LOVELACE_DATA
+        from homeassistant.components.lovelace.resources import (
+            ResourceStorageCollection,
+        )
+    except ImportError:  # pragma: no cover
+        return
+    data = hass.data.get(LOVELACE_DATA)
+    resources = getattr(data, "resources", None)
+    if not isinstance(resources, ResourceStorageCollection):
+        return
+    try:
+        await resources.async_load()
+        if any(item.get("url") == url for item in resources.async_items()):
+            return
+        await resources.async_create_item({"res_type": "module", "url": url})
+    except Exception:  # noqa: BLE001
+        LOGGER.debug("Anova: could not register the Lovelace resource", exc_info=True)
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
