@@ -1,10 +1,10 @@
 {
   "domain": "anova_local",
   "name": "Anova Cooker",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "config_flow": true,
-  "documentation": "https://github.com/mbaumannn/anova-ble",
-  "issue_tracker": "https://github.com/mbaumannn/anova-ble/issues",
+  "documentation": "https://github.com/mbaumannn/home-assistant-anova-local",
+  "issue_tracker": "https://github.com/mbaumannn/home-assistant-anova-local/issues",
   "iot_class": "local_polling",
   "dependencies": [
     "bluetooth_adapters"
