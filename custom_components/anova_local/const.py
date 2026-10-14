@@ -48,6 +48,37 @@ CMD_START_TIMER = "start time"
 CMD_STOP_TIMER = "stop time"
 CMD_SET_SPEAKER_OFF = "set speaker off"
 
+# --- transports ---------------------------------------------------------
+# The cooker can be reached over Bluetooth (as before) or over the local Wi-Fi
+# server this integration hosts, which the cooker dials itself.
+CONF_TRANSPORT = "transport"
+TRANSPORT_BLUETOOTH = "bluetooth"
+TRANSPORT_WIFI = "wifi"
+CONF_SERVER_HOST = "server_host"
+CONF_LISTEN_PORT = "listen_port"
+DEFAULT_LISTEN_PORT = 8080
+
+# --- Wi-Fi onboarding ---------------------------------------------------
+# Written over Bluetooth once, during setup. The cooker stores them and survives
+# a reboot; only the Anova app can undo them.
+CONF_SSID = "ssid"
+CONF_PASSWORD = "password"
+CONF_ID_CARD = "id_card"
+CONF_KEY = "key"
+CMD_GET_ID_CARD = "get id card"
+CMD_VERSION = "version"
+CMD_GET_NUMBER = "get number"
+CMD_SET_NUMBER = "set number {key}"
+CMD_SERVER_PARA = "server para {host} {port}"
+CMD_WIFI_PARA = "wifi para 2 {ssid} {password} WPA2PSK AES"
+CMD_SMARTLINK_START = "smartlink start"
+CMD_SET_NAME = "set name {name}"
+CMD_CLEAR_ALARM = "clear alarm"
+CMD_SPEAKER_STATUS = "speaker status"
+# The network name may not contain a space and only 2.4 GHz is supported.
+WIFI_MIN_PASSWORD = 8
+WIFI_MAX_PASSWORD = 63
+
 
 class AnovaStatus(str, Enum):
     """Raw device status as returned by the cooker."""
