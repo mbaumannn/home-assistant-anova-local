@@ -2,21 +2,40 @@
   "config": {
     "flow_title": "{name}",
     "step": {
-      "bluetooth_confirm": {
-        "title": "Pair Anova",
-        "description": "Do you want to pair {name} with Home Assistant?"
-      },
       "user": {
-        "title": "Add Anova manually",
-        "description": "Enter the Bluetooth address (MAC) of your Anova.",
-        "data": { "address": "Bluetooth address" }
+        "title": "Add your Anova cooker",
+        "description": "How should Home Assistant talk to the cooker?\n\n- **Bluetooth (direct)** works straight away, with a Bluetooth adapter or an ESPHome Bluetooth proxy within range.\n- **Wi-Fi (local server)** puts the cooker on your Wi-Fi so distance stops mattering. Home Assistant takes the place of Anova's cloud, so there is no account and no Anova app involved. You need the cooker within a few metres of Home Assistant once, for this setup.",
+        "data": {
+          "transport": "Connection",
+          "address": "Cooker Bluetooth address"
+        }
+      },
+      "bluetooth_confirm": {
+        "title": "Set up {name}?",
+        "description": "Home Assistant found {name} over Bluetooth. Nothing is written to the cooker and it stays paired with the Anova app; you can remove this integration at any time."
+      },
+      "wifi": {
+        "title": "Give the cooker your Wi-Fi",
+        "description": "Enter the network the cooker should use. It supports **2.4 GHz** only, and cannot join a network name that contains a space.\n\nHome Assistant then writes three settings over Bluetooth: a fresh security key, its own address ({host}:{port}) and this Wi-Fi network. The cooker stores them and keeps them after a reboot. Only the Anova app can undo them.\n\nClose the Anova app first: the cooker accepts one Bluetooth connection at a time.",
+        "data": {
+          "ssid": "Wi-Fi network name (2.4 GHz)",
+          "password": "Wi-Fi password",
+          "server_host": "Address the cooker should dial",
+          "listen_port": "Port the cooker should dial"
+        }
       }
     },
+    "error": {
+      "not_found": "The cooker did not answer over Bluetooth. Is it plugged in and switched on? The ring should be lit.",
+      "unsupported": "The cooker answered, but not in a way this integration understands. Please report this with your firmware version.",
+      "wifi_credentials_invalid": "The cooker cannot use this network: its name may not contain a space, and the password must be 8 to 63 characters.",
+      "provision_failed": "The settings could not be written. Keep the cooker within a few metres of Home Assistant, close the Anova app, and check the log for the reason."
+    },
     "abort": {
-      "already_configured": "Device is already configured.",
-      "not_found": "Device not in range. Turn the Anova on and try again.",
-      "unsupported": "This device did not respond as an Anova cooker.",
-      "bluetooth_not_available": "No Bluetooth adapter available."
+      "already_configured": "This cooker is already set up.",
+      "not_found": "The cooker is not in range. Switch it on and try again.",
+      "unsupported": "This device did not answer as an Anova cooker.",
+      "bluetooth_not_available": "No connectable Bluetooth adapter found. Add one, or an ESPHome Bluetooth proxy, and try again."
     }
   }
 }
