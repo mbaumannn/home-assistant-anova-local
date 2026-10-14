@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Anova Bluetooth - B1 minimal cook card</title>
+<style>
+  :root{
+    --bg:#f2f4f7; --card:#fff; --line:#e3e6ea; --text:#1c1f23; --muted:#6b7280;
+    --accent:#1f8fff; --track:#eceff3; --warn:#e08a00; --warn-bg:#fff6e6;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+  .wrap{max-width:1120px;margin:0 auto;padding:28px 20px 60px}
+  h1{font-size:22px;font-weight:600;margin:0 0 4px}
+  .sub{color:var(--muted);margin:0 0 22px;font-size:14px}
+  .row{display:flex;gap:22px;flex-wrap:wrap;align-items:flex-start}
+  .panel{flex:1 1 300px;min-width:280px}
+  .label{font-size:12px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;
+    box-shadow:0 1px 2px rgba(16,24,40,.04)}
+  .stack{display:flex;flex-direction:column;gap:12px}
+  .muted{color:var(--muted)}
+
+  .ring{position:relative;width:150px;height:150px;margin:6px auto}
+  .ring .center{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:2px}
+  .ring .big{font-size:22px;font-weight:600}
+  .ring .cap{font-size:11px;color:var(--muted)}
+
+  .numrow{display:flex;align-items:center;justify-content:space-between;gap:14px}
+  .numrow .l{display:flex;align-items:center;gap:12px}
+  .numrow .v{font-size:20px;font-weight:600;font-variant-numeric:tabular-nums}
+  .mini{width:38px;height:38px;border-radius:12px;border:1px solid var(--line);background:#fff;font-size:19px;color:var(--muted)}
+
+  .warn{display:flex;align-items:center;gap:12px;background:var(--warn-bg);border:1px solid #f0dcb4;border-radius:16px;padding:14px 16px}
+  .warn .ic{width:26px;height:26px;border-radius:50%;background:#f6e6c8;color:var(--warn);display:grid;place-items:center;font-size:14px}
+  .warn b{display:block;font-size:15px}
+  .warn span{font-size:13px;color:var(--muted)}
+
+  /* thermostat context */
+  .thermo{display:flex;flex-direction:column;align-items:center;gap:6px}
+  .dial{position:relative;width:210px;height:130px}
+  .dial .mode{position:absolute;top:40px;left:50%;transform:translateX(-50%);font-size:12px;color:var(--muted)}
+  .dial .target{position:absolute;top:54px;left:50%;transform:translateX(-50%);font-size:38px;font-weight:300}
+  .dial .target small{font-size:18px;color:var(--muted)}
+  .dial .cur{position:absolute;top:104px;left:50%;transform:translateX(-50%);font-size:12px;color:var(--muted)}
+  .stepper{display:flex;gap:16px}
+
+  .hidden{opacity:0}
+  .note{margin-top:22px;color:var(--muted);font-size:13px;line-height:1.5}
+  code{background:#eef1f5;border-radius:5px;padding:1px 5px;font-size:12px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>B1 — minimale cook-kaart</h1>
+  <p class="sub">Alleen wat je tijdens het koken gebruikt. Duur zie je alleen als je nog niet kookt; de low-water-melding alleen als die speelt.</p>
+
+  <div class="row">
+    <!-- thermostat context -->
+    <div class="panel">
+      <div class="label">Temperatuur (bestaande thermostaat-kaart)</div>
+      <div class="card">
+        <div class="thermo">
+          <div class="dial">
+            <svg viewBox="0 0 210 130" width="210" height="130">
+              <path d="M25 112 A80 80 0 1 1 185 112" fill="none" stroke="var(--track)" stroke-width="14" stroke-linecap="round"/>
+              <circle cx="57" cy="49" r="8" fill="#fff" stroke="var(--accent)" stroke-width="3"/>
+            </svg>
+            <div class="mode">Heat</div>
+            <div class="target">58<small>°C</small></div>
+            <div class="cur">🌡 21.5 °C</div>
+          </div>
+          <div class="stepper"><button class="mini">−</button><button class="mini">＋</button></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- idle -->
+    <div class="panel">
+      <div class="label">Cook-kaart — idle</div>
+      <div class="stack">
+        <div class="card">
+          <div class="ring">
+            <svg viewBox="0 0 120 120" width="150" height="150">
+              <circle cx="60" cy="60" r="52" fill="none" stroke="var(--track)" stroke-width="12"/>
+            </svg>
+            <div class="center"><div class="big">Start</div></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="numrow">
+            <div class="l"><span class="muted">⏱</span><span>Duration</span></div>
+            <div class="l"><button class="mini">−</button><span class="v">90<span class="muted" style="font-size:12px"> min</span></span><button class="mini">＋</button></div>
+          </div>
+        </div>
+      </div>
+      <p class="note">Tik op de ring om te starten. Duur zie je alleen nu.</p>
+    </div>
+
+    <!-- cooking -->
+    <div class="panel">
+      <div class="label">Cook-kaart — cooking</div>
+      <div class="card">
+        <div class="ring">
+          <svg viewBox="0 0 120 120" width="150" height="150">
+            <circle cx="60" cy="60" r="52" fill="none" stroke="var(--track)" stroke-width="12"/>
+            <circle cx="60" cy="60" r="52" fill="none" stroke="var(--accent)" stroke-width="12"
+                    stroke-linecap="round" stroke-dasharray="326.7" stroke-dashoffset="82" transform="rotate(-90 60 60)"/>
+          </svg>
+          <div class="center"><div class="big">75 min</div><div class="cap">resterend</div></div>
+        </div>
+      </div>
+      <p class="note">De duur-kaart is verborgen; alleen de aftel-ring. Hou de ring ingedrukt om te stoppen.</p>
+    </div>
+
+    <!-- low water -->
+    <div class="panel">
+      <div class="label">Cook-kaart — low water</div>
+      <div class="stack">
+        <div class="warn">
+          <div class="ic">⚠</div>
+          <div><b>Low water</b><span>Vul water boven de minimumstreep en start opnieuw.</span></div>
+        </div>
+      </div>
+      <p class="note">Verschijnt alleen als het alarm speelt; tik erop om het piepen te dempen. Anders zie je hier niets.</p>
+    </div>
+  </div>
+
+  <p class="note">
+    Verbergen op het dashboard: de <code>switch.timer</code>, de losse sensoren en de silence-knop horen niet in de UI.
+    De cook-kaart gebruikt alleen: resterend (<code>sensor.…timer_remaining</code>), duur (<code>number.…cook_duration</code>),
+    start (<code>button.…start_cook</code>), stop (<code>climate.…</code>) en de low-water-indicator (<code>binary_sensor.…low_water</code>).
+  </p>
+</div>
+</body>
+</html>
