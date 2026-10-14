@@ -39,6 +39,11 @@ const DEFAULTS = {
 // own climate card, so dragging stays precise.
 const TEMP_RANGE = 10;
 
+// A dragged or typed value is shown at once and kept until the cooker reports it,
+// so the ring never snaps back while the round trip is still in flight. After this
+// long the reported value wins again (the cooker may simply have refused it).
+const WANT_TIMEOUT = 15000;
+
 // Home Assistant's thermostat card reserves a title bar of this height, and its
 // text block sits slightly above the middle of the dial because the dial has a gap
 // at the bottom.
@@ -128,9 +133,15 @@ class AnovaCookCard extends HTMLElement {
         .label.secondary { display: flex; align-items: center; gap: 4px; }
         .label.secondary ha-icon { --mdc-icon-size: 16px; }
         .big { font-size: 44px; font-weight: 400; line-height: 1.12;
-               font-variant-numeric: tabular-nums; color: var(--primary-text-color); }
+               font-variant-numeric: tabular-nums; color: var(--primary-text-color);
+               pointer-events: auto; cursor: pointer; }
         .big .decimal { font-size: 0.42em; }
         .big .unit { font-size: 0.33em; }
+        .big-input { width: 150px; text-align: center; font-size: 44px; font-weight: 400;
+                     font-variant-numeric: tabular-nums; background: transparent;
+                     color: var(--primary-text-color); border: none;
+                     border-bottom: 2px solid var(--primary-color);
+                     outline: none; padding: 0 0 2px; }
         .sr { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
               overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
         .warn { color: var(--warning-color, #ffa600); }
@@ -171,14 +182,17 @@ class AnovaCookCard extends HTMLElement {
             <ha-control-circular-slider mode="start"></ha-control-circular-slider>
             <div class="info">
               <p class="label state"></p>
-              <div class="big" aria-hidden="true"></div>
+              <div class="big" role="button" tabindex="0" aria-label="Set the temperature"
+                   title="Tap to type a temperature"></div>
+              <input class="big-input" type="number" inputmode="decimal" step="0.1"
+                     hidden aria-label="temperature" />
               <p class="label secondary">
                 <ha-icon icon="mdi:thermometer"></ha-icon><span class="cur"></span>
               </p>
               <span class="sr"></span>
             </div>
           </div>
-          <div class="bar" hidden><div class="fill"></div></div>
+          <div class="bar"><div class="fill"></div></div>
           <div class="dur">
             <button class="step minus" aria-label="minder">−</button>
             <span class="val" role="button" tabindex="0"
@@ -217,6 +231,24 @@ class AnovaCookCard extends HTMLElement {
           composed: true,
         })
       );
+
+    // The temperature: tap the number to type one.
+    const big = this.shadowRoot.querySelector(".big");
+    big.onclick = () => this._openTemperatureInput();
+    big.onkeydown = (ev) => {
+      if (ev.key === "Enter" || ev.key === " ") this._openTemperatureInput();
+    };
+    const bigInput = this.shadowRoot.querySelector(".big-input");
+    bigInput.onkeydown = (ev) => {
+      if (ev.key === "Enter") {
+        ev.preventDefault();
+        this._commitTemperatureInput();
+      } else if (ev.key === "Escape") {
+        ev.preventDefault();
+        this._closeTemperatureInput();
+      }
+    };
+    bigInput.onblur = () => this._commitTemperatureInput();
 
     // The duration: tap the number to type one, or hold -/+ for the same field.
     const value = this.shadowRoot.querySelector(".val");
@@ -299,6 +331,37 @@ class AnovaCookCard extends HTMLElement {
     value.hidden = false;
   }
 
+  _openTemperatureInput() {
+    if (!this._ringIsTemperature) return;            // the dial is the duration then
+    const input = this.shadowRoot.querySelector(".big-input");
+    const big = this.shadowRoot.querySelector(".big");
+    if (!input || !big || !input.hidden) return;
+    const target = Number(this._attrs(this._id("climate")).temperature);
+    input.value = Number.isFinite(target) ? String(target) : "";
+    input.hidden = false;
+    big.hidden = true;
+    input.focus();
+    if (input.select) input.select();
+  }
+
+  _commitTemperatureInput() {
+    const input = this.shadowRoot.querySelector(".big-input");
+    const big = this.shadowRoot.querySelector(".big");
+    if (!input || input.hidden) return;
+    const typed = Number(input.value);
+    input.hidden = true;
+    big.hidden = false;
+    if (Number.isFinite(typed) && typed > 0) this._setTemperature(typed);
+  }
+
+  _closeTemperatureInput() {
+    const input = this.shadowRoot.querySelector(".big-input");
+    const big = this.shadowRoot.querySelector(".big");
+    if (!input || input.hidden) return;
+    input.hidden = true;
+    big.hidden = false;
+  }
+
   _stepSize() {
     return Number(this._config?.step) || 5;
   }
@@ -315,6 +378,11 @@ class AnovaCookCard extends HTMLElement {
   }
 
   _setDuration(value) {
+    // Show it at once: the cooker takes a moment, and a stepper that does not move
+    // until the next poll feels broken.
+    this._wantedDuration = value;
+    this._wantedAt = Date.now();
+    this._render();
     this._hass.callService("number", "set_value", {
       entity_id: this._id("duration"),
       value,
@@ -322,10 +390,36 @@ class AnovaCookCard extends HTMLElement {
   }
 
   _setTemperature(value) {
+    const wanted = Math.round(value * 10) / 10;
+    this._wantedTarget = wanted;
+    this._wantedAt = Date.now();
+    this._render();
     this._hass.callService("climate", "set_temperature", {
       entity_id: this._id("climate"),
-      temperature: Math.round(value * 10) / 10,
+      temperature: wanted,
     });
+  }
+
+  /** What the user last asked for, until the cooker reports it (or it expires). */
+  _pendingTarget(reported) {
+    const wanted = this._wantedTarget;
+    if (wanted === null || wanted === undefined) return reported;
+    const same = Number.isFinite(reported) && Math.abs(reported - wanted) < 0.05;
+    if (same || Date.now() - (this._wantedAt || 0) > WANT_TIMEOUT) {
+      this._wantedTarget = null;                    // the cooker had its say
+      return reported;
+    }
+    return wanted;
+  }
+
+  _pendingDuration(reported) {
+    const wanted = this._wantedDuration;
+    if (wanted === null || wanted === undefined) return reported;
+    if (wanted === reported || Date.now() - (this._wantedAt || 0) > WANT_TIMEOUT) {
+      this._wantedDuration = null;
+      return reported;
+    }
+    return wanted;
   }
 
   _stepBy(delta) {
@@ -375,9 +469,11 @@ class AnovaCookCard extends HTMLElement {
     const status = this._state(this._id("status"));
     const low = this._state(this._id("low_water")) === "on";
     const remaining = Number(this._state(this._id("remaining"))) || 0;
-    const duration = Number(this._state(this._id("duration"))) || 0;
+    const duration = this._pendingDuration(
+      Number(this._state(this._id("duration"))) || 0
+    );
     const climate = this._attrs(this._id("climate"));
-    const target = Number(climate.temperature);
+    const target = this._pendingTarget(Number(climate.temperature));
     const current = Number(climate.current_temperature);
     const hasTarget = Number.isFinite(target);
     const hasCurrent = Number.isFinite(current);
@@ -458,24 +554,29 @@ class AnovaCookCard extends HTMLElement {
     stateEl.textContent = stateText;
     stateEl.classList.toggle("warn", low);
 
-    // The countdown lives between - and +: the preset while the cooker is off,
-    // the remaining minutes while it cooks (with the buttons out of the way).
+    // The countdown lives between - and +: the preset while the cooker is off, the
+    // remaining minutes while it cooks (with the buttons out of the way). The bar
+    // stays in the layout either way, so the spacing is the same in both states.
     const bar = root.querySelector(".bar");
+    const fill = root.querySelector(".fill");
     const val = root.querySelector(".val");
     if (cooking) {
       val.innerHTML = duration > 0
         ? `${this._short(remaining)}<small> min</small>`
         : "no timer";
       const fraction = duration > 0 ? Math.max(0, Math.min(1, remaining / duration)) : 0;
-      root.querySelector(".fill").style.width = `${fraction * 100}%`;
-      bar.hidden = duration <= 0;
+      fill.style.width = `${fraction * 100}%`;
+      bar.style.background = "var(--divider-color)";
     } else {
       val.innerHTML = `${duration}<small> min</small>`;
-      bar.hidden = true;
+      fill.style.width = "0%";
+      bar.style.background = "transparent";          // holds the space, not the eye
     }
-    root.querySelector(".fill").style.background = accent;
-    if (this._minus) this._minus.hidden = cooking;
-    if (this._plus) this._plus.hidden = cooking;
+    fill.style.background = accent;
+    // The buttons step aside while cooking but keep their place, so the row — and
+    // with it the spacing between the ring and the timer — is the same in both states.
+    if (this._minus) this._minus.style.visibility = cooking ? "hidden" : "";
+    if (this._plus) this._plus.style.visibility = cooking ? "hidden" : "";
     root.querySelector(".dur").hidden = false;
 
     root.querySelector(".start").disabled = low || cooking;
