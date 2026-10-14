@@ -29,7 +29,7 @@ FAST = ServerTimings(
 async def served(cooker: FakeCooker, **kwargs: object) -> AnovaLocalServer:
     """A started server with one cooker dialled in and handshaken."""
     server = AnovaLocalServer("127.0.0.1", 0, timings=FAST, **kwargs)
-    await server.start()
+    await server.listen()
     await cooker.dial(server.server_port)
     await server.wait_for_cooker(timeout=2)
     return server
@@ -45,7 +45,7 @@ async def test_handshake_exposes_the_identity() -> None:
             assert server.key == "75a17b9d64"
             assert server.connected_at is not None
         finally:
-            await server.stop()
+            await server.close()
 
 
 async def test_send_writes_the_command_and_returns_the_reply() -> None:
@@ -55,7 +55,7 @@ async def test_send_writes_the_command_and_returns_the_reply() -> None:
             assert await server.send("read temp") == "27.4"
             assert "read temp" in cooker.commands
         finally:
-            await server.stop()
+            await server.close()
 
 
 async def test_send_raises_when_the_cooker_rejects_the_command() -> None:
@@ -66,7 +66,7 @@ async def test_send_raises_when_the_cooker_rejects_the_command() -> None:
                 await server.send("frobnicate")
             assert server.connected          # a rejection is not a broken link
         finally:
-            await server.stop()
+            await server.close()
 
 
 async def test_send_times_out_when_the_cooker_stays_silent() -> None:
@@ -77,7 +77,7 @@ async def test_send_times_out_when_the_cooker_stays_silent() -> None:
             with pytest.raises(AnovaTimeoutError, match="stop time"):
                 await server.send("stop time")
         finally:
-            await server.stop()
+            await server.close()
 
 
 async def test_send_can_be_fire_and_forget_for_silent_commands() -> None:
@@ -88,24 +88,24 @@ async def test_send_can_be_fire_and_forget_for_silent_commands() -> None:
             assert await server.send("start time", expect_reply=False) == ""
             assert cooker.timer_running is True
         finally:
-            await server.stop()
+            await server.close()
 
 
 async def test_send_on_a_server_without_a_cooker_raises() -> None:
     server = AnovaLocalServer("127.0.0.1", 0, timings=FAST)
-    await server.start()
+    await server.listen()
     try:
         with pytest.raises(AnovaOfflineError):
             await server.send("status")
     finally:
-        await server.stop()
+        await server.close()
 
 
 async def test_update_state_is_none_until_a_cooker_is_there() -> None:
     server = AnovaLocalServer("127.0.0.1", 0, timings=FAST)
-    await server.start()
+    await server.listen()
     try:
         assert await server.update_state() is None
         assert server.state is None
     finally:
-        await server.stop()
+        await server.close()

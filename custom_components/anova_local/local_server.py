@@ -27,7 +27,19 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from .const import LOGGER, AnovaStatus, AnovaUnit
+from .const import (
+    CMD_SET_SPEAKER_OFF,
+    CMD_SET_TEMP,
+    CMD_SET_TIMER,
+    CMD_SET_UNIT,
+    CMD_START,
+    CMD_START_TIMER,
+    CMD_STOP,
+    CMD_STOP_TIMER,
+    LOGGER,
+    AnovaStatus,
+    AnovaUnit,
+)
 from .frame import MAX_FRAME, FrameDecoder, FrameError, encode
 from .state import AnovaState
 
@@ -106,6 +118,9 @@ class AnovaLocalServer:
         self.version: str = ""
         self.key: str = ""
         self.connected_at: datetime | None = None
+        # The duration preset the "start cooking" button uses, written to the cooker
+        # so its own timer matches what Home Assistant shows. Set by the number entity.
+        self.duration_preset: int = 0
 
         self._server: asyncio.AbstractServer | None = None
         self._reader: asyncio.StreamReader | None = None
@@ -125,13 +140,17 @@ class AnovaLocalServer:
         self._cleanup: list[asyncio.Task[None]] = []
 
     # -- lifecycle ---------------------------------------------------------
-    async def start(self) -> None:
-        """Listen for the cooker. It dials us; we never dial it."""
+    async def listen(self) -> None:
+        """Listen for the cooker. It dials us; we never dial it.
+
+        Named ``listen`` and not ``start``: ``start()`` is the transport call that
+        tells the cooker to heat, and the two must never be confused.
+        """
         self._server = await asyncio.start_server(self._on_client, self.host, self.port)
         LOGGER.debug("Anova: listening for the cooker on %s:%s", self.host, self.server_port)
 
-    async def stop(self) -> None:
-        """Stop listening, close the link and let every task finish.
+    async def close(self) -> None:
+        """Close the link and stop listening, then let every task finish.
 
         Home Assistant's test suite fails a test that leaves tasks behind, and a
         caller that reloads the entry deserves the same tidiness: cancelled tasks
@@ -244,6 +263,59 @@ class AnovaLocalServer:
                     await self.send(command)
             self._publish_state()
         return self._state
+
+    # -- the transport API: the same twelve calls the coordinator makes on the --
+    # -- BLE client, so the entities never learn which transport is in use    --
+    async def connect(self) -> None:
+        """Wait briefly for the cooker to dial in.
+
+        The cooker connects on its own schedule, so a timeout is normal (Home
+        Assistant may set up while the cooker is switched off) and never raises.
+        """
+        with contextlib.suppress(AnovaOfflineError):
+            await self.wait_for_cooker(timeout=self.timings.handshake)
+
+    async def disconnect(self) -> None:
+        """Drop the link. The listener stays up, so the cooker can dial in again."""
+        self._drop_connection()
+        await self._drain_cleanup()
+
+    async def set_temp(self, temp: float) -> None:
+        await self.send(CMD_SET_TEMP.format(temp=temp))
+
+    async def set_timer(self, minutes: int) -> None:
+        await self.send(CMD_SET_TIMER.format(minutes=minutes))
+
+    async def set_unit(self, unit: AnovaUnit) -> None:
+        await self.send(CMD_SET_UNIT.format(unit=unit.value))
+
+    async def start(self) -> None:
+        await self.send(CMD_START)
+
+    async def stop(self) -> None:
+        """Stop heating: the transport call, not the server's own :meth:`close`."""
+        await self.send(CMD_STOP)
+
+    async def start_timer(self) -> None:
+        # `start time` is accepted by the cooker without a reply.
+        await self.send(CMD_START_TIMER, expect_reply=False)
+
+    async def stop_timer(self) -> None:
+        await self.send(CMD_STOP_TIMER)
+
+    async def silence(self) -> None:
+        """Turn the cooker speaker off to silence an alarm."""
+        await self.send(CMD_SET_SPEAKER_OFF)
+
+    async def start_cook(self) -> None:
+        """Start a cook using the stored duration preset.
+
+        The preset goes to the cooker first, so its own timer matches the value
+        shown in Home Assistant, then heating and the countdown start.
+        """
+        await self.set_timer(self.duration_preset)
+        await self.start()
+        await self.start_timer()
 
     def _remember(self, command: str, reply: str) -> None:
         """Keep the last exchanges, for the diagnostics download."""

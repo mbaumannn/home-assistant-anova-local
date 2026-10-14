@@ -29,7 +29,7 @@ LIVENESS = ServerTimings(
 
 async def start(timings: ServerTimings, **kwargs: object) -> AnovaLocalServer:
     server = AnovaLocalServer("127.0.0.1", 0, timings=timings, **kwargs)
-    await server.start()
+    await server.listen()
     return server
 
 
@@ -47,7 +47,7 @@ async def test_events_reach_the_callback() -> None:
                 await asyncio.sleep(0.02)
             assert seen == ["event wifi time start"]
         finally:
-            await server.stop()
+            await server.close()
 
 
 async def test_events_are_not_mistaken_for_replies() -> None:
@@ -60,7 +60,7 @@ async def test_events_are_not_mistaken_for_replies() -> None:
             await cooker.emit("event change temp")
             assert await server.send("read set temp") == "57.0"
         finally:
-            await server.stop()
+            await server.close()
 
 
 async def test_state_is_published_and_only_when_it_changes() -> None:
@@ -86,7 +86,7 @@ async def test_state_is_published_and_only_when_it_changes() -> None:
             assert published[-1].current_temp == 51.4
             assert server.state is not None
         finally:
-            await server.stop()
+            await server.close()
 
 
 @pytest.mark.parametrize(
@@ -110,7 +110,7 @@ async def test_every_status_form_the_cooker_uses_is_understood(
             assert state is not None
             assert state.status is expected
         finally:
-            await server.stop()
+            await server.close()
 
 
 async def test_timer_and_unit_are_reported() -> None:
@@ -124,7 +124,7 @@ async def test_timer_and_unit_are_reported() -> None:
             assert (state.timer_minutes, state.timer_running) == (45, True)
             assert state.unit is AnovaUnit.FAHRENHEIT
         finally:
-            await server.stop()
+            await server.close()
 
 
 async def test_liveness_closes_a_link_that_stops_producing_frames() -> None:
@@ -140,7 +140,7 @@ async def test_liveness_closes_a_link_that_stops_producing_frames() -> None:
             assert not server.connected
             assert server.state is None            # no stale values are published
         finally:
-            await server.stop()
+            await server.close()
 
 
 async def test_consecutive_misses_close_the_link() -> None:
@@ -156,7 +156,7 @@ async def test_consecutive_misses_close_the_link() -> None:
                 await asyncio.sleep(0.02)
             assert not server.connected
         finally:
-            await server.stop()
+            await server.close()
 
 
 async def test_a_new_connection_replaces_the_old_one() -> None:
@@ -172,7 +172,7 @@ async def test_a_new_connection_replaces_the_old_one() -> None:
             assert "get id card" in second.commands       # the new link is the live one
             assert await server.send("read temp") == "20.0"
         finally:
-            await server.stop()
+            await server.close()
 
 
 async def test_an_unexpected_cooker_is_refused() -> None:
@@ -184,7 +184,7 @@ async def test_an_unexpected_cooker_is_refused() -> None:
             assert not server.connected
             assert server.id_card == ""                  # never trusted
         finally:
-            await server.stop()
+            await server.close()
 
 
 async def test_the_server_survives_a_cooker_that_never_speaks() -> None:
@@ -200,7 +200,7 @@ async def test_the_server_survives_a_cooker_that_never_speaks() -> None:
             await server.wait_for_cooker(timeout=2)
             assert await server.send("read temp") == "20.0"
         finally:
-            await server.stop()
+            await server.close()
 
 
 async def test_history_records_the_exchange_for_diagnostics() -> None:
@@ -216,4 +216,4 @@ async def test_history_records_the_exchange_for_diagnostics() -> None:
             assert entry["reply"] == "20.0"
             assert entry["at"]
         finally:
-            await server.stop()
+            await server.close()
