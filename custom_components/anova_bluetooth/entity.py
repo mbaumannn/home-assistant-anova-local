@@ -1,4 +1,4 @@
-"""Basis-entiteit voor de Anova-integratie."""
+"""Base entity for the Anova integration."""
 from __future__ import annotations
 
 from homeassistant.helpers.device_registry import DeviceInfo
@@ -9,7 +9,7 @@ from .coordinator import AnovaDataUpdateCoordinator
 
 
 class AnovaEntity(CoordinatorEntity[AnovaDataUpdateCoordinator]):
-    """Gedeelde basis: koppelt unique_id + device_info."""
+    """Shared base: attaches unique_id and device_info."""
 
     _attr_has_entity_name = True
 

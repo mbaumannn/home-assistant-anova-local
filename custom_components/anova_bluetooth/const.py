@@ -1,4 +1,4 @@
-"""Constants voor de Anova Bluetooth-integratie."""
+"""Constants for the Anova Bluetooth integration."""
 from __future__ import annotations
 
 from enum import Enum
@@ -18,14 +18,14 @@ DEVICE_NAME = "Anova"
 COMMAND_TERMINATOR = "\r"
 COMMAND_TIMEOUT = 10.0
 
-# Read-commando's
+# Read commands
 CMD_STATUS = "status"
 CMD_READ_TEMP = "read temp"
 CMD_READ_TARGET_TEMP = "read set temp"
 CMD_READ_TIMER = "read timer"
 CMD_READ_UNIT = "read unit"
 
-# Write-commando's (templates)
+# Write commands (templates)
 CMD_SET_TEMP = "set temp {temp:.1f}"
 CMD_SET_TIMER = "set timer {minutes:d}"
 CMD_SET_UNIT = "set unit {unit}"
@@ -36,7 +36,7 @@ CMD_STOP_TIMER = "stop time"
 
 
 class AnovaStatus(str, Enum):
-    """Ruwe device-status zoals het toestel die teruggeeft."""
+    """Raw device status as returned by the cooker."""
 
     STOPPED = "stopped"
     RUNNING = "running"
@@ -48,10 +48,10 @@ class AnovaUnit(str, Enum):
     FAHRENHEIT = "f"
 
 
-# Weergave-mapping voor sensor.anova_status
+# Display mapping for sensor.anova_status
 STATUS_LABELS = {
     AnovaStatus.STOPPED: "idle",
-    AnovaStatus.RUNNING: "koken",
-    AnovaStatus.LOW_WATER: "laag water",
+    AnovaStatus.RUNNING: "cooking",
+    AnovaStatus.LOW_WATER: "low water",
 }
-STATUS_LABEL_OPTIONS = ["idle", "koken", "laag water"]
+STATUS_LABEL_OPTIONS = ["idle", "cooking", "low water"]

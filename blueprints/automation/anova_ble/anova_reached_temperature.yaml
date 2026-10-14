@@ -1,7 +1,7 @@
 blueprint:
-  name: Anova — melding op temperatuur
+  name: Anova reached temperature
   description: >
-    Meldt wanneer het water de doeltemperatuur bereikt tijdens het koken.
+    Notifies when the water reaches the target temperature during a cook.
   domain: automation
   input:
     climate_entity:
@@ -10,7 +10,7 @@ blueprint:
         entity:
           domain: climate
     notify_target:
-      name: Melding naar
+      name: Notify target
       selector:
         target:
           entity:
@@ -34,6 +34,6 @@ action:
     target: !input notify_target
     data:
       title: "Anova"
-      message: "Op temperatuur 🌡️"
+      message: "Water has reached the target temperature."
 
 mode: single

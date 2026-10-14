@@ -1,4 +1,4 @@
-"""Sensoren: status en resterende tijd."""
+"""Sensors: status and remaining time."""
 from __future__ import annotations
 
 from homeassistant.components.sensor import (
@@ -25,7 +25,7 @@ async def async_setup_entry(
 
 
 class AnovaStatusSensor(AnovaEntity, SensorEntity):
-    """Status: idle / koken / laag water."""
+    """Status: idle / cooking / low water."""
 
     _attr_name = "Status"
     _attr_icon = "mdi:chef-hat"
@@ -44,9 +44,9 @@ class AnovaStatusSensor(AnovaEntity, SensorEntity):
 
 
 class AnovaRemainingSensor(AnovaEntity, SensorEntity):
-    """Resterende tijd in minuten."""
+    """Remaining time in minutes."""
 
-    _attr_name = "Timer resterend"
+    _attr_name = "Timer remaining"
     _attr_icon = "mdi:timer-sand"
     _attr_device_class = SensorDeviceClass.DURATION
     _attr_native_unit_of_measurement = UnitOfTime.MINUTES

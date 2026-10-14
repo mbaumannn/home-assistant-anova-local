@@ -1,4 +1,4 @@
-"""Knop: start koken (start + start timer)."""
+"""Button: start cook (start plus start timer)."""
 from __future__ import annotations
 
 from homeassistant.components.button import ButtonEntity
@@ -21,9 +21,9 @@ async def async_setup_entry(
 
 
 class AnovaStartCook(AnovaEntity, ButtonEntity):
-    """Start het verwarmen én de aftelling in één tik."""
+    """Starts heating and the countdown in a single tap."""
 
-    _attr_name = "Start koken"
+    _attr_name = "Start cook"
     _attr_icon = "mdi:play-circle-outline"
 
     def __init__(self, coordinator: AnovaDataUpdateCoordinator) -> None:

@@ -14,7 +14,7 @@
     },
     "abort": {
       "already_configured": "Device is already configured.",
-      "not_found": "Device not in range. Turn the Anova on and retry.",
+      "not_found": "Device not in range. Turn the Anova on and try again.",
       "unsupported": "This device did not respond as an Anova cooker.",
       "bluetooth_not_available": "No Bluetooth adapter available."
     }

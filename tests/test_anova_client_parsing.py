@@ -1,4 +1,4 @@
-"""Parsing-tests met antwoorden die live van het toestel zijn opgevangen."""
+"""Parsing tests using answers captured live from the device."""
 from __future__ import annotations
 
 import pytest

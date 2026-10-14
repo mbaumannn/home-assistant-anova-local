@@ -1,4 +1,4 @@
-"""Switch-entiteit: timer start/stop."""
+"""Switch entity: timer start/stop."""
 from __future__ import annotations
 
 from homeassistant.components.switch import SwitchEntity
@@ -21,7 +21,7 @@ async def async_setup_entry(
 
 
 class AnovaTimer(AnovaEntity, SwitchEntity):
-    """Start/stopt de aftelling (`start time`/`stop time`)."""
+    """Starts and stops the countdown (``start time``/``stop time``)."""
 
     _attr_name = "Timer"
     _attr_icon = "mdi:timer-play-outline"
