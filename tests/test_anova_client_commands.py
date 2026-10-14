@@ -351,3 +351,12 @@ async def test_optional_action_command_tolerates_silence(monkeypatch):
 
     assert created[0].is_connected is True
     assert b"start\r" in created[0].writes
+
+
+async def test_silence_sends_speaker_off(fake):
+    fake._responses.update({"set speaker off": "set speaker off\r"})
+    anova = anova_client.AnovaBLE(ble_device=object())
+
+    await anova.silence()
+
+    assert b"set speaker off\r" in fake.writes

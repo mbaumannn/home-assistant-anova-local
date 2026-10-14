@@ -99,12 +99,14 @@ def test_cook_finished_trigger_is_on_to_off():
     assert trigger["to"] == "off"
 
 
-async def test_cook_finished_reports_confirmed_expiry(hass):
+async def test_cook_finished_reports_on_timer_stop(hass):
     assert await _cook_finished_satisfied(hass, "0") is True
 
 
-async def test_cook_finished_does_not_report_cancellation_with_time_left(hass):
-    assert await _cook_finished_satisfied(hass, "1") is False
+async def test_cook_finished_also_fires_on_cancellation(hass):
+    # Measured on firmware 6.1.1: expiry and cancellation both show
+    # `0 stopped`, so a cancellation also fires. This is documented, not a bug.
+    assert await _cook_finished_satisfied(hass, "1") is True
 
 
 async def test_cook_finished_does_not_report_connection_loss(hass):

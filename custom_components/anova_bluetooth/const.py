@@ -41,6 +41,7 @@ CMD_START = "start"
 CMD_STOP = "stop"
 CMD_START_TIMER = "start time"
 CMD_STOP_TIMER = "stop time"
+CMD_SET_SPEAKER_OFF = "set speaker off"
 
 
 class AnovaStatus(str, Enum):

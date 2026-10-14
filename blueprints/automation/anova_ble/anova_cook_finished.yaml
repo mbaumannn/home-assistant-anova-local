@@ -1,14 +1,12 @@
 blueprint:
-  name: Anova cook finished
+  name: Anova timer stopped
   description: >
-    Notifies when the Anova timer has run out, meaning the cook is done. A cook
-    that is stopped manually while time remains is a cancellation and does not
-    notify. A lost connection does not notify either.
-
-    Assumption to verify: on firmware 6.1.1 the remaining time reaches 0 before
-    the timer stops, so a stopped timer with 0 minutes left is a completed cook.
-    This is confirmed by the Phase 1b timer measurement. Until that measurement
-    is done, treat the behavior as unverified.
+    Notifies when the Anova timer stops. On firmware 6.1.1 the cooker reports
+    the same state whether the timer ran out (cook finished) or the timer was
+    stopped early (cancelled): `read timer` returns `0 stopped` in both cases
+    and the timer switch goes from on to off. Expiry and cancellation can
+    therefore not be told apart from the entities, so this automation fires on
+    either. A lost connection does not fire.
   domain: automation
   input:
     timer_switch:
@@ -39,12 +37,7 @@ trigger:
     to: "off"
 
 condition:
-  # Confirmed expiry: the timer reported exactly 0 remaining when it stopped. A
-  # manual cancellation stops the timer with time still on the clock (for
-  # example 1 minute), so it is not reported as done.
-  - condition: template
-    value_template: "{{ states(remaining_entity) | int(-1) == 0 }}"
-  # A lost connection is not a completed cook: both entities must be available.
+  # A lost connection is not a finished timer: both entities must be available.
   - condition: template
     value_template: "{{ states(timer_entity) not in ['unknown', 'unavailable'] }}"
   - condition: template
@@ -55,6 +48,6 @@ action:
     target: !input notify_target
     data:
       title: "Anova"
-      message: "Sous-vide is done."
+      message: "Sous-vide timer stopped."
 
 mode: single

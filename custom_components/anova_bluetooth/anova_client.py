@@ -20,6 +20,7 @@ from .const import (
     CMD_SET_TEMP,
     CMD_SET_TIMER,
     CMD_SET_UNIT,
+    CMD_SET_SPEAKER_OFF,
     CMD_START,
     CMD_START_TIMER,
     CMD_STATUS,
@@ -245,6 +246,10 @@ class AnovaBLE:
 
     async def stop_timer(self) -> None:
         await self._command(CMD_STOP_TIMER)
+
+    async def silence(self) -> None:
+        """Turn the cooker speaker off to silence an alarm."""
+        await self._command(CMD_SET_SPEAKER_OFF)
 
     async def start_cook(self) -> None:
         """Start a cook using the stored duration preset.
