@@ -110,21 +110,25 @@ class AnovaCookCard extends HTMLElement {
         .wrap { height: 100%; box-sizing: border-box;
                 display: flex; flex-direction: column; align-items: center;
                 gap: 10px; padding: 14px 16px 16px; }
-        .head { display: flex; align-items: baseline; justify-content: space-between;
-                width: 100%; gap: 8px; }
+        .head { display: flex; align-items: baseline; width: 100%; gap: 8px; }
         .state { font-size: 16px; font-weight: 500; color: var(--primary-text-color); }
-        .left { font-size: 14px; color: var(--secondary-text-color);
-                font-variant-numeric: tabular-nums; white-space: nowrap; }
         .warn { color: var(--warning-color, #e08a00); }
         .dial { position: relative; width: 100%; max-width: 100%; }
         ha-control-circular-slider { width: 100% !important; display: block; }
         .center { position: absolute; inset: 0; display: flex; flex-direction: column;
-                  align-items: center; justify-content: center; gap: 2px;
+                  align-items: center; justify-content: center; gap: 6px;
                   padding-bottom: 15%; pointer-events: none; }
-        .big { font-size: 34px; font-weight: 300; line-height: 1;
+        .big { font-size: 40px; font-weight: 300; line-height: 1;
                font-variant-numeric: tabular-nums; color: var(--primary-text-color); }
-        .big small { font-size: 16px; color: var(--secondary-text-color); font-weight: 400; }
+        .big small { font-size: 19px; font-weight: 400; margin-left: 2px;
+                     vertical-align: 12px; color: var(--primary-text-color); }
+        .cur { display: flex; align-items: center; gap: 5px; font-size: 15px;
+               color: var(--secondary-text-color); font-variant-numeric: tabular-nums; }
+        .cur ha-icon { --mdc-icon-size: 17px; }
         .cap { font-size: 12px; color: var(--secondary-text-color); }
+        .dot { position: absolute; width: 9px; height: 9px; border-radius: 50%;
+               background: var(--secondary-text-color); transform: translate(-50%, -50%);
+               pointer-events: none; }
         .bar { width: 100%; height: 4px; border-radius: 2px;
                background: var(--divider-color); overflow: hidden; }
         .bar .fill { height: 100%; border-radius: 2px; background: var(--primary-color);
@@ -154,11 +158,15 @@ class AnovaCookCard extends HTMLElement {
         <div class="wrap">
           <div class="head">
             <span class="state"></span>
-            <span class="left"></span>
           </div>
           <div class="dial">
             <ha-control-circular-slider mode="start"></ha-control-circular-slider>
-            <div class="center"><div class="big"></div><div class="cap"></div></div>
+            <span class="dot" hidden></span>
+            <div class="center">
+              <div class="big"></div>
+              <div class="cur" hidden></div>
+              <div class="cap" hidden></div>
+            </div>
           </div>
           <div class="bar" hidden><div class="fill"></div></div>
           <div class="dur">
@@ -212,6 +220,8 @@ class AnovaCookCard extends HTMLElement {
     const steps = [[".minus", -1], [".plus", 1]];
     for (const [selector, direction] of steps) {
       const button = this.shadowRoot.querySelector(selector);
+      if (selector === ".minus") this._minus = button;
+      else this._plus = button;
       let hold = null;
       button.onpointerdown = () => {
         hold = setTimeout(() => {
@@ -238,6 +248,7 @@ class AnovaCookCard extends HTMLElement {
   }
 
   _openValueInput() {
+    if (this._cooking) return;                    // the preset is fixed mid-cook
     const input = this.shadowRoot.querySelector(".val-input");
     const value = this.shadowRoot.querySelector(".val");
     if (!input || !value || !input.hidden) return;
@@ -372,36 +383,56 @@ class AnovaCookCard extends HTMLElement {
     );
     this._suppressSlider = false;
 
-    // The centre: the ring's own value, with what the water is doing underneath.
+    // The centre, like the card it replaces: the target large with a small unit,
+    // and the water temperature underneath with a thermometer.
     const big = root.querySelector(".big");
+    const cur = root.querySelector(".cur");
     const cap = root.querySelector(".cap");
+    const hasCurrent = Number.isFinite(current);
     if (ringIsTemperature) {
-      big.innerHTML = `${target.toFixed(1)}<small> ${unit}</small>`;
-      cap.textContent = cooking && Number.isFinite(current)
-        ? `water ${current.toFixed(1)} ${unit}`
-        : "target";
+      big.innerHTML = `${target.toFixed(1)}<small>${unit}</small>`;
+      cur.hidden = !hasCurrent;
+      cur.innerHTML = hasCurrent
+        ? '<ha-icon icon="mdi:thermometer"></ha-icon>' +
+          `<span>${current.toFixed(1)} ${unit}</span>`
+        : "";
+      cap.hidden = true;
     } else {
       big.innerHTML = `${duration}<small> min</small>`;
+      cur.hidden = true;
+      cap.hidden = false;
       cap.textContent = "duration";
     }
 
-    // The state in words, and the countdown that must stay visible while cooking.
+    // The water temperature as a marker on the ring, on the knob's own scale.
+    const dot = root.querySelector(".dot");
+    if (ringIsTemperature && hasCurrent) {
+      const marker = this._markerPosition(current, this._slider.min, this._slider.max);
+      dot.style.left = marker.left;
+      dot.style.top = marker.top;
+      dot.hidden = false;
+    } else {
+      dot.hidden = true;
+    }
+
+    // The state in words.
     let stateText = "Off";
     if (low) {
       stateText = "Low water";
     } else if (cooking) {
-      const reached = Number.isFinite(current) && hasTarget && current >= target - 0.5;
+      const reached = hasCurrent && hasTarget && current >= target - 0.5;
       stateText = reached ? "Cooking" : "Heating";
     }
     const stateEl = root.querySelector(".state");
     stateEl.textContent = stateText;
     stateEl.classList.toggle("warn", low);
 
-    const left = root.querySelector(".left");
+    // The countdown lives between - and +: the preset while the cooker is off,
+    // the remaining minutes while it cooks (with the buttons out of the way).
     const bar = root.querySelector(".bar");
+    const val = root.querySelector(".val");
     if (cooking) {
-      left.textContent = duration > 0 ? `${remaining} min left` : "no timer";
-      left.classList.toggle("warn", low);
+      val.textContent = duration > 0 ? `${remaining} min` : "no timer";
       const fraction = duration > 0 ? Math.max(0, Math.min(1, remaining / duration)) : 0;
       root.querySelector(".fill").style.width = `${fraction * 100}%`;
       root.querySelector(".fill").style.background = low
@@ -409,21 +440,28 @@ class AnovaCookCard extends HTMLElement {
         : "var(--primary-color)";
       bar.hidden = duration <= 0;
     } else {
-      left.textContent = Number.isFinite(current)
-        ? `water ${current.toFixed(1)} ${unit}`
-        : "";
-      left.classList.remove("warn");
+      val.textContent = `${duration} min`;
       bar.hidden = true;
     }
-
-    // The stepper is the duration control while the cooker is off, and it is put
-    // away while cooking (the preset is not something to fiddle with mid-cook).
-    const dur = root.querySelector(".dur");
-    dur.hidden = cooking;
-    root.querySelector(".val").textContent = `${duration} min`;
+    if (this._minus) this._minus.hidden = cooking;
+    if (this._plus) this._plus.hidden = cooking;
+    root.querySelector(".dur").hidden = false;
 
     root.querySelector(".start").disabled = low || cooking;
     root.querySelector(".stop").disabled = !cooking;
+  }
+
+  _markerPosition(value, min, max) {
+    // Home Assistant's slider draws its arc at radius 145 in a 320 unit box, from
+    // 135 degrees over 270 degrees, so a value's place on the ring is:
+    const span = max - min;
+    const fraction = span > 0 ? Math.max(0, Math.min(1, (value - min) / span)) : 0.5;
+    const angle = ((135 + 270 * fraction) * Math.PI) / 180;
+    const radius = (145 / 320) * 100;             // per cent of the dial's box
+    return {
+      left: `${50 + radius * Math.cos(angle)}%`,
+      top: `${50 + radius * Math.sin(angle)}%`,
+    };
   }
 }
 
