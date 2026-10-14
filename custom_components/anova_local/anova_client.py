@@ -11,6 +11,8 @@ from bleak_retry_connector import (
 )
 
 from .const import (
+    BLE_CHUNK_DELAY,
+    BLE_CHUNK_SIZE,
     CHAR_UUID,
     CMD_READ_TARGET_TEMP,
     CMD_READ_TEMP,
@@ -210,7 +212,15 @@ class AnovaBLE:
             self._drain_notifications()
             try:
                 async with asyncio.timeout(WRITE_TIMEOUT):
-                    await client.write_gatt_char(CHAR_UUID, payload, response=False)
+                    # A single write carries at most BLE_CHUNK_SIZE bytes; longer
+                    # lines (the onboarding commands) are sent in pieces, as the
+                    # Anova app does, or BlueZ rejects the write outright.
+                    for offset in range(0, len(payload), BLE_CHUNK_SIZE):
+                        await client.write_gatt_char(
+                            CHAR_UUID, payload[offset : offset + BLE_CHUNK_SIZE], response=False
+                        )
+                        if offset + BLE_CHUNK_SIZE < len(payload):
+                            await asyncio.sleep(BLE_CHUNK_DELAY)
                 if expect_reply is False:
                     await asyncio.sleep(REPLY_SETTLE)
                 else:
@@ -239,6 +249,14 @@ class AnovaBLE:
         reply = buffer.decode(errors="ignore").strip()
         LOGGER.debug("Anova %r -> %r", command, reply)
         return reply
+
+    async def raw_command(self, command: str, *, expect_reply: bool | None = True) -> str:
+        """Send a raw protocol line, used by the BLE onboarding in the config flow.
+
+        The onboarding writes ``set number``, ``server para`` and ``wifi para``,
+        which no entity ever sends.
+        """
+        return await self._command(command, expect_reply=expect_reply)
 
     # --- state -------------------------------------------------------------
     async def _read(self, command: str, parse):

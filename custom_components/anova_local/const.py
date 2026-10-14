@@ -25,6 +25,11 @@ REPLY_SETTLE = 0.5
 # The cooker needs a moment after a fresh connection before it accepts a
 # notification subscription and answers commands.
 POST_CONNECT_SETTLE = 1.0
+# A single BLE write carries at most 20 bytes, so a longer line (every onboarding
+# command: `server para ...`, `wifi para ...`) goes out in chunks, as the Anova app
+# does. Verified on the cooker: a 29-byte write fails with "Failed to initiate write".
+BLE_CHUNK_SIZE = 20
+BLE_CHUNK_DELAY = 0.06
 
 # Read commands
 CMD_STATUS = "status"
