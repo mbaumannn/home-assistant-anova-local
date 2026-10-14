@@ -464,13 +464,13 @@ class AnovaCookCard extends HTMLElement {
     const val = root.querySelector(".val");
     if (cooking) {
       val.innerHTML = duration > 0
-        ? `${this._short(remaining)}<small>min</small>`
+        ? `${this._short(remaining)}<small> min</small>`
         : "no timer";
       const fraction = duration > 0 ? Math.max(0, Math.min(1, remaining / duration)) : 0;
       root.querySelector(".fill").style.width = `${fraction * 100}%`;
       bar.hidden = duration <= 0;
     } else {
-      val.innerHTML = `${duration}<small>min</small>`;
+      val.innerHTML = `${duration}<small> min</small>`;
       bar.hidden = true;
     }
     root.querySelector(".fill").style.background = accent;

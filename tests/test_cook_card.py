@@ -206,7 +206,7 @@ def test_off_is_blue_and_shows_the_target_with_the_water_temperature() -> None:
     assert out["accent"] == "var(--primary-color)"          # blue while setting up
     assert out["markerCurrent"] == 24.5                     # Home Assistant's dial draws the dot
     assert out["barHidden"] is True
-    assert out["valueHtml"] == "60<small>min</small>"
+    assert out["valueHtml"] == "60<small> min</small>"
     assert out["minusHidden"] is False
     assert out["sliderValue"] == 36.0
     assert (out["sliderMin"], out["sliderMax"]) == (26.0, 46.0)
@@ -225,7 +225,7 @@ def test_heating_is_orange_and_counts_down_between_minus_and_plus() -> None:
     assert out["state"] == "Heating"
     assert out["accent"] == "var(--state-climate-heat-color, #ff6f22)"   # orange while it works
     assert out["barColor"] == "var(--state-climate-heat-color, #ff6f22)"
-    assert out["valueHtml"] == "26<small>min</small>"      # the countdown, where the
+    assert out["valueHtml"] == "26<small> min</small>"      # the countdown, where the
     assert out["minusHidden"] is True                      # preset sits when off
     assert out["plusHidden"] is True
     assert out["barHidden"] is False
@@ -241,7 +241,7 @@ def test_low_water_takes_the_warning_colour() -> None:
     assert out["warns"] is True
     assert out["accent"] == "var(--warning-color, #ffa600)"
     assert out["startDisabled"] is True
-    assert out["valueHtml"] == "26<small>min</small>"
+    assert out["valueHtml"] == "26<small> min</small>"
 
 
 def test_the_target_temperature_can_be_set_before_the_cook() -> None:
