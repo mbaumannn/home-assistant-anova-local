@@ -1,24 +1,19 @@
 /**
  * Anova Cook Card
  *
- * A vertically laid out sous-vide cook card for the Anova Bluetooth
- * integration: a countdown ring on top, the duration stepper and Start/Stop
- * below, plus a low-water warning. Laid out vertically so it pairs with the
- * thermostat card at an equal height.
+ * A sous-vide cook card for the Anova Bluetooth integration. The ring mirrors
+ * the Home Assistant thermostat dial (same 300 degree arc and stroke) so the
+ * two cards read as a matched pair.
  *
- * Registered automatically by the integration, so no extra frontend cards are
- * required.
+ * Idle:  the ring shows the configured duration.
+ * Cooking: the ring depletes with the remaining time.
+ *
+ * Registered automatically by the integration; no extra frontend cards needed.
  *
  * Config:
  *   type: custom:anova-cook-card
- *   # optional overrides
- *   entities:
- *     start: button.anova_bluetooth_start_cook
- *     stop: button.anova_bluetooth_stop_cook
- *     duration: number.anova_bluetooth_cook_duration
- *     remaining: sensor.anova_bluetooth_timer_remaining
- *     status: sensor.anova_bluetooth_status
- *     low_water: binary_sensor.anova_bluetooth_low_water
+ *   entities:            # optional overrides
+ *     start / stop / duration / remaining / status / low_water
  */
 
 const DEFAULTS = {
@@ -30,8 +25,8 @@ const DEFAULTS = {
   low_water: "binary_sensor.anova_bluetooth_low_water",
 };
 
-const RING_RADIUS = 54;
-const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
+// 300 degree arc, radius 108 (same geometry as the HA thermostat dial)
+const ARC_LENGTH = 108 * ((300 * Math.PI) / 180); // 565.5
 
 class AnovaCookCard extends HTMLElement {
   constructor() {
@@ -52,7 +47,7 @@ class AnovaCookCard extends HTMLElement {
   }
 
   getCardSize() {
-    return 5;
+    return 6;
   }
 
   _id(kind) {
@@ -69,51 +64,45 @@ class AnovaCookCard extends HTMLElement {
       <style>
         :host { display: block; height: 100%; }
         ha-card { height: 100%; box-sizing: border-box; }
-        .wrap {
-          height: 100%; box-sizing: border-box;
-          display: flex; flex-direction: column;
-          align-items: center; justify-content: center;
-          gap: 16px; padding: 16px;
-        }
-        .ring { position: relative; width: 168px; height: 168px; flex: 0 0 auto; }
-        .ring svg { width: 168px; height: 168px; transform: rotate(-90deg); }
-        .ring .track { fill: none; stroke: var(--secondary-background-color); stroke-width: 12; }
-        .ring .prog { fill: none; stroke: var(--primary-color); stroke-width: 12;
-                      stroke-linecap: round; transition: stroke-dashoffset .6s ease; }
+        .wrap { height: 100%; box-sizing: border-box;
+                display: flex; flex-direction: column; align-items: center;
+                justify-content: center; gap: 14px; padding: 14px 16px; }
+        .ring { position: relative; width: 100%; max-width: 300px; margin: 0 auto; }
+        .ring svg { display: block; width: 100%; height: auto; }
+        .track { fill: none; stroke: var(--secondary-background-color); stroke-width: 16;
+                 stroke-linecap: round; }
+        .prog { fill: none; stroke: var(--primary-color); stroke-width: 16;
+                stroke-linecap: round; transition: stroke-dashoffset .6s ease; }
         .ring.low .prog { stroke: var(--warning-color, #e08a00); }
-        .center { position: absolute; inset: 0; display: flex; flex-direction: column;
-                  align-items: center; justify-content: center; gap: 2px; }
-        .big { font-size: 30px; font-weight: 600; font-variant-numeric: tabular-nums;
-               line-height: 1; }
+        .ring.idle .prog { opacity: .35; }
+        .center { position: absolute; left: 0; right: 0; top: 34%;
+                  display: flex; flex-direction: column; align-items: center; gap: 2px; }
+        .big { font-size: 30px; font-weight: 400; line-height: 1;
+               font-variant-numeric: tabular-nums; }
+        .big small { font-size: 15px; color: var(--secondary-text-color); font-weight: 400; }
         .cap { font-size: 12px; color: var(--secondary-text-color); }
-        .dur { display: flex; align-items: center; gap: 14px; }
-        .dur .label { color: var(--secondary-text-color); font-size: 13px; }
+        .dur { display: flex; align-items: center; gap: 12px; }
         .step { width: 40px; height: 40px; border-radius: 12px;
                 border: 1px solid var(--divider-color);
                 background: var(--card-background-color); color: var(--primary-text-color);
-                font-size: 20px; cursor: pointer; line-height: 1; }
-        .val { min-width: 74px; text-align: center; font-size: 20px; font-weight: 600;
+                font-size: 20px; line-height: 1; cursor: pointer; }
+        .val { min-width: 78px; text-align: center; font-size: 20px; font-weight: 600;
                font-variant-numeric: tabular-nums; }
-        .btns { display: flex; gap: 10px; width: 100%; max-width: 320px; }
-        button.act { flex: 1; height: 46px; border-radius: 23px; border: none; cursor: pointer;
+        .btns { display: flex; gap: 10px; width: 100%; max-width: 300px; }
+        button.act { flex: 1; height: 44px; border-radius: 22px; border: none; cursor: pointer;
                      font-size: 15px; font-weight: 600; }
         button.act:disabled { opacity: .4; cursor: default; }
         .start { background: var(--primary-color); color: var(--text-primary-color, #fff); }
         .stop { background: transparent; color: var(--primary-text-color);
                 border: 1px solid var(--divider-color) !important; }
-        .chip { font-size: 12px; padding: 3px 12px; border-radius: 999px;
-                background: var(--secondary-background-color); color: var(--secondary-text-color); }
-        .chip.good { background: rgba(46,158,91,.15); color: #2e9e5b; }
-        .chip.warn { background: rgba(224,138,0,.15); color: #c47a00; }
       </style>
       <ha-card>
         <div class="wrap">
           <div class="ring">
-            <svg viewBox="0 0 120 120">
-              <circle class="track" cx="60" cy="60" r="${RING_RADIUS}"></circle>
-              <circle class="prog" cx="60" cy="60" r="${RING_RADIUS}"
-                      stroke-dasharray="${RING_CIRCUMFERENCE}"
-                      stroke-dashoffset="${RING_CIRCUMFERENCE}"></circle>
+            <svg viewBox="0 0 300 210">
+              <path class="track" d="M42 180 A108 108 0 1 1 258 180"></path>
+              <path class="prog" d="M42 180 A108 108 0 1 1 258 180"
+                    stroke-dasharray="${ARC_LENGTH}" stroke-dashoffset="0"></path>
             </svg>
             <div class="center"><div class="big"></div><div class="cap"></div></div>
           </div>
@@ -126,7 +115,6 @@ class AnovaCookCard extends HTMLElement {
             <button class="act start">Start cook</button>
             <button class="act stop">Stop</button>
           </div>
-          <div class="chip idle">idle</div>
         </div>
       </ha-card>
     `;
@@ -179,30 +167,27 @@ class AnovaCookCard extends HTMLElement {
     }
     const cooking = this._pending === "start" || status === "cooking";
 
-    const pct = cooking && duration ? Math.max(0, Math.min(1, remaining / duration)) : 0;
-    root.querySelector(".prog").style.strokeDashoffset = String(
-      RING_CIRCUMFERENCE * (1 - pct)
-    );
-    root.querySelector(".ring").classList.toggle("low", low);
+    const pct = cooking
+      ? duration
+        ? Math.max(0, Math.min(1, remaining / duration))
+        : 1
+      : 1; // idle: the ring shows the full configured duration
+    root.querySelector(".prog").style.strokeDashoffset = String(ARC_LENGTH * (1 - pct));
+    const ring = root.querySelector(".ring");
+    ring.classList.toggle("low", low);
+    ring.classList.toggle("idle", !cooking);
 
-    root.querySelector(".big").textContent = cooking ? `${remaining} min` : "Start";
-    root.querySelector(".cap").textContent = cooking
-      ? `${duration} min ingesteld`
-      : "tik op Start";
+    if (cooking) {
+      root.querySelector(".big").innerHTML = `${remaining}<small> min</small>`;
+      root.querySelector(".cap").textContent = `van ${duration} min`;
+    } else {
+      root.querySelector(".big").innerHTML = `${duration}<small> min</small>`;
+      root.querySelector(".cap").textContent = "kookduur";
+    }
     root.querySelector(".val").textContent = `${duration} min`;
 
-    const startBtn = root.querySelector(".start");
-    const stopBtn = root.querySelector(".stop");
-    startBtn.disabled = low || cooking;
-    stopBtn.disabled = !cooking;
-
-    const chip = root.querySelector(".chip");
-    chip.textContent = low
-      ? "low water: vul water bij"
-      : cooking
-        ? "cooking"
-        : "idle";
-    chip.className = `chip ${low ? "warn" : cooking ? "good" : "idle"}`;
+    root.querySelector(".start").disabled = low || cooking;
+    root.querySelector(".stop").disabled = !cooking;
   }
 }
 

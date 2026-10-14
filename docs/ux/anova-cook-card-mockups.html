@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Anova - cook card layout</title>
+<title>Anova - cook card (polished)</title>
 <style>
   :root{
     --bg:#f2f4f7; --card:#fff; --line:#e3e6ea; --text:#1c1f23; --muted:#6b7280;
@@ -17,83 +17,79 @@
   .sub{color:var(--muted);margin:0 0 22px;font-size:14px}
   .label{font-size:12px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
   .row{display:flex;gap:16px;align-items:stretch}
+  .cell{flex:1 1 0;min-width:0;display:flex}
   .card{background:var(--card);border:1px solid var(--line);border-radius:16px;
     box-shadow:0 1px 2px rgba(16,24,40,.05)}
-  .cell{flex:1 1 0;min-width:0;display:flex}
 
-  /* thermostat */
-  .thermo{flex:1;display:flex;flex-direction:column;align-items:center;gap:8px;padding:18px 16px}
-  .thermo h3{align-self:flex-start;margin:0 0 6px;font-size:15px;font-weight:600}
-  .dial{position:relative;width:300px;height:210px;margin:0 auto}
-  .dial .mode{position:absolute;top:70px;left:50%;transform:translateX(-50%);font-size:14px;color:var(--muted)}
-  .dial .target{position:absolute;top:92px;left:50%;transform:translateX(-50%);font-size:52px;font-weight:300;letter-spacing:-1px}
+  .thermo{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px 16px}
+  .thermo .title{align-self:flex-start;font-size:15px;font-weight:600}
+  .dial{position:relative;width:100%;max-width:300px;margin:0 auto}
+  .dial svg{display:block;width:100%;height:auto}
+  .dial .mode{position:absolute;left:0;right:0;top:34%;text-align:center;font-size:14px;color:var(--muted)}
+  .dial .target{position:absolute;left:0;right:0;top:44%;text-align:center;font-size:52px;font-weight:300}
   .dial .target small{font-size:24px;color:var(--muted)}
-  .dial .cur{position:absolute;top:160px;left:50%;transform:translateX(-50%);font-size:14px;color:var(--muted)}
-  .stepper{display:flex;gap:18px;margin-top:8px}
-  .rnd{width:56px;height:56px;border-radius:50%;border:1px solid var(--line);background:#fff;color:var(--muted);font-size:24px}
+  .dial .cur{position:absolute;left:0;right:0;top:76%;text-align:center;font-size:14px;color:var(--muted)}
+  .stepper{display:flex;gap:18px;margin-top:6px}
+  .rnd{width:54px;height:54px;border-radius:50%;border:1px solid var(--line);background:#fff;color:var(--muted);font-size:24px}
 
-  /* cook card (vertical) */
-  .cook{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:16px}
-  .ring{position:relative;width:168px;height:168px}
-  .ring .center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px}
-  .ring .big{font-size:30px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1}
-  .ring .cap{font-size:12px;color:var(--muted)}
-  .dur{display:flex;align-items:center;gap:14px}
+  .cook{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:14px 16px}
+  .ring{position:relative;width:100%;max-width:300px;margin:0 auto}
+  .ring svg{display:block;width:100%;height:auto}
+  .ring .center{position:absolute;left:0;right:0;top:34%;display:flex;flex-direction:column;align-items:center;gap:2px}
+  .big{font-size:30px;font-weight:400;line-height:1;font-variant-numeric:tabular-nums}
+  .big small{font-size:15px;color:var(--muted)}
+  .cap{font-size:12px;color:var(--muted)}
+  .dur{display:flex;align-items:center;gap:12px}
   .sq{width:40px;height:40px;border-radius:12px;border:1px solid var(--line);background:#fff;font-size:20px;color:var(--muted)}
-  .val{min-width:74px;text-align:center;font-size:20px;font-weight:600;font-variant-numeric:tabular-nums}
-  .btns{display:flex;gap:10px;width:100%;max-width:320px}
-  .act{flex:1;height:46px;border-radius:23px;border:none;font-size:15px;font-weight:600}
+  .val{min-width:78px;text-align:center;font-size:20px;font-weight:600;font-variant-numeric:tabular-nums}
+  .btns{display:flex;gap:10px;width:100%;max-width:300px}
+  .act{flex:1;height:44px;border-radius:22px;border:none;font-size:15px;font-weight:600}
   .start{background:var(--accent);color:#fff}
   .stop{background:#fff;color:var(--text);border:1px solid var(--line)}
-  .stop.off{color:#b9bec5}
-  .chip{font-size:12px;padding:3px 12px;border-radius:999px;background:var(--track);color:var(--muted)}
-  .chip.good{background:rgba(46,158,91,.14);color:var(--good)}
-  .chip.warn{background:rgba(224,138,0,.14);color:var(--warn)}
-  .hint{margin-top:26px;color:var(--muted);font-size:13px;line-height:1.55}
+  .act[data-disabled="1"]{opacity:.4}
+  .hint{margin-top:24px;color:var(--muted);font-size:13px;line-height:1.55}
 </style>
 </head>
 <body>
 <div class="wrap">
-  <h1>Nieuwe opzet: twee gelijkwaardige kaarten op één rij</h1>
-  <p class="sub">De cook-kaart is nu verticaal (ring boven, duur + knoppen eronder) en staat met de thermostaat in een <b>horizontal-stack</b>, zodat beide kaarten <b>even hoog</b> zijn.</p>
+  <h1>Strakkere cook-kaart</h1>
+  <p class="sub">De ring heeft nu dezelfde arc-vorm en dikte als de thermostaat-dial. Idle: ring toont de kookduur. Cooking: ring loopt leeg met de resterende tijd. Links de thermostaat, rechts de cook-kaart, even hoog.</p>
 
   <div class="row">
-    <!-- thermostat -->
     <div class="cell"><div class="card thermo">
-      <h3>Anova Bluetooth</h3>
+      <div class="title">Anova Bluetooth</div>
       <div class="dial">
-        <svg viewBox="0 0 300 210" width="300" height="210">
+        <svg viewBox="0 0 300 210">
           <path d="M42 180 A108 108 0 1 1 258 180" fill="none" stroke="var(--track)" stroke-width="16" stroke-linecap="round"/>
           <path d="M42 180 A108 108 0 0 1 84 84" fill="none" stroke="#f6b58a" stroke-width="16" stroke-linecap="round"/>
           <circle cx="84" cy="84" r="10" fill="#fff" stroke="var(--accent)" stroke-width="3"/>
         </svg>
         <div class="mode">Heat</div>
         <div class="target">36<small>°C</small></div>
-        <div class="cur">🌡 31.1 °C</div>
+        <div class="cur">🌡 31.9 °C</div>
       </div>
       <div class="stepper"><span class="rnd">−</span><span class="rnd">＋</span></div>
     </div></div>
 
-    <!-- cook card idle -->
+    <!-- idle -->
     <div class="cell"><div class="card cook">
       <div class="ring">
-        <svg viewBox="0 0 120 120" width="168" height="168">
-          <circle cx="60" cy="60" r="54" fill="none" stroke="var(--track)" stroke-width="12"/>
+        <svg viewBox="0 0 300 210">
+          <path d="M42 180 A108 108 0 1 1 258 180" fill="none" stroke="var(--track)" stroke-width="16" stroke-linecap="round"/>
+          <path d="M42 180 A108 108 0 1 1 258 180" fill="none" stroke="var(--accent)" stroke-width="16" stroke-linecap="round" opacity=".35"/>
         </svg>
-        <div class="center"><div class="big">Start</div><div class="cap">tik op Start</div></div>
+        <div class="center"><div class="big">5<small> min</small></div><div class="cap">kookduur</div></div>
       </div>
       <div class="dur"><span class="sq">−</span><span class="val">5 min</span><span class="sq">＋</span></div>
-      <div class="btns"><span class="act start" style="display:grid;place-items:center">Start cook</span><span class="act stop off" style="display:grid;place-items:center">Stop</span></div>
-      <div class="chip">idle</div>
+      <div class="btns"><span class="act start" style="display:grid;place-items:center">Start cook</span><span class="act stop" data-disabled="1" style="display:grid;place-items:center">Stop</span></div>
     </div></div>
   </div>
 
   <div class="row" style="margin-top:16px">
-    <!-- thermostat again (cooking state context) -->
     <div class="cell"><div class="card thermo">
-      <h3>Anova Bluetooth</h3>
+      <div class="title">Anova Bluetooth</div>
       <div class="dial">
-        <svg viewBox="0 0 300 210" width="300" height="210">
+        <svg viewBox="0 0 300 210">
           <path d="M42 180 A108 108 0 1 1 258 180" fill="none" stroke="var(--track)" stroke-width="16" stroke-linecap="round"/>
           <path d="M42 180 A108 108 0 0 1 150 72" fill="none" stroke="#f6b58a" stroke-width="16" stroke-linecap="round"/>
           <circle cx="150" cy="72" r="10" fill="#fff" stroke="var(--accent)" stroke-width="3"/>
@@ -105,29 +101,22 @@
       <div class="stepper"><span class="rnd">−</span><span class="rnd">＋</span></div>
     </div></div>
 
-    <!-- cook card cooking -->
+    <!-- cooking (68 of 90 = 75%) -->
     <div class="cell"><div class="card cook">
       <div class="ring">
-        <svg viewBox="0 0 120 120" width="168" height="168">
-          <circle cx="60" cy="60" r="54" fill="none" stroke="var(--track)" stroke-width="12"/>
-          <circle cx="60" cy="60" r="54" fill="none" stroke="var(--accent)" stroke-width="12" stroke-linecap="round"
-                  stroke-dasharray="339.3" stroke-dashoffset="70" transform="rotate(-90 60 60)"/>
+        <svg viewBox="0 0 300 210">
+          <path d="M42 180 A108 108 0 1 1 258 180" fill="none" stroke="var(--track)" stroke-width="16" stroke-linecap="round"/>
+          <path d="M42 180 A108 108 0 1 1 258 180" fill="none" stroke="var(--accent)" stroke-width="16" stroke-linecap="round"
+                stroke-dasharray="565.5" stroke-dashoffset="141.4"/>
         </svg>
-        <div class="center"><div class="big">68 min</div><div class="cap">90 min ingesteld</div></div>
+        <div class="center"><div class="big">68<small> min</small></div><div class="cap">van 90 min</div></div>
       </div>
       <div class="dur"><span class="sq">−</span><span class="val">90 min</span><span class="sq">＋</span></div>
-      <div class="btns"><span class="act start" style="display:grid;place-items:center;opacity:.4">Start cook</span><span class="act stop" style="display:grid;place-items:center">Stop</span></div>
-      <div class="chip good">cooking</div>
+      <div class="btns"><span class="act start" data-disabled="1" style="display:grid;place-items:center">Start cook</span><span class="act stop" style="display:grid;place-items:center">Stop</span></div>
     </div></div>
   </div>
 
-  <p class="hint">
-    Bovenin: <b>idle</b> (ring leeg, "Start", Stop uitgeschakeld). Onderin: <b>cooking</b> (ring loopt leeg, Start uitgeschakeld, Stop actief).
-    Beide kaarten zijn even hoog doordat ze in een horizontal-stack zitten. De inhoud van de cook-kaart is verticaal gecentreerd, dus bij meer hoogte blijft het in balans.
-  </p>
-  <p class="hint">
-    Let op: op een smal scherm (telefoon) wordt een horizontal-stack krap; daar kun je de twee kaarten beter onder elkaar zetten (losse kaarten, geen stack).
-  </p>
+  <p class="hint">De twee ringen hebben nu dezelfde vorm, dikte en opening onderaan, zodat het een paar lijkt. Bovenin idle (ring vol, gedimd), onderin cooking (ring loopt leeg).</p>
 </div>
 </body>
 </html>
