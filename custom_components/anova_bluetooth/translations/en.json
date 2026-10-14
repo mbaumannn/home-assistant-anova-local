@@ -1,0 +1,22 @@
+{
+  "config": {
+    "flow_title": "{name}",
+    "step": {
+      "bluetooth_confirm": {
+        "title": "Pair Anova",
+        "description": "Do you want to pair {name} with Home Assistant?"
+      },
+      "user": {
+        "title": "Add Anova manually",
+        "description": "Enter the Bluetooth address (MAC) of your Anova.",
+        "data": { "address": "Bluetooth address" }
+      }
+    },
+    "abort": {
+      "already_configured": "Device is already configured.",
+      "not_found": "Device not in range. Turn the Anova on and retry.",
+      "unsupported": "This device did not respond as an Anova cooker.",
+      "bluetooth_not_available": "No Bluetooth adapter available."
+    }
+  }
+}
