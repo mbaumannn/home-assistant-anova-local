@@ -6,8 +6,8 @@ import asyncio
 import pytest
 from bleak.exc import BleakError
 
-from anova_bluetooth import anova_client
-from anova_bluetooth.const import AnovaStatus, AnovaUnit
+from anova_local import anova_client
+from anova_local.const import AnovaStatus, AnovaUnit
 
 
 @pytest.fixture(autouse=True)

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from anova_bluetooth.util import format_ble_address
+from anova_local.util import format_ble_address
 
 
 @pytest.mark.parametrize(

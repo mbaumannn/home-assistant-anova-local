@@ -3,8 +3,8 @@ from __future__ import annotations
 
 import pytest
 
-from anova_bluetooth.const import AnovaStatus, AnovaUnit
-from anova_bluetooth.anova_client import (
+from anova_local.const import AnovaStatus, AnovaUnit
+from anova_local.anova_client import (
     parse_status,
     parse_temperature,
     parse_timer,

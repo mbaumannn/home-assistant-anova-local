@@ -65,9 +65,9 @@ async def test_reached_temperature_template(hass, state, attributes, expected):
     data = _load("anova_reached_temperature.yaml")
     value_template = data["trigger"][0]["value_template"]
 
-    hass.states.async_set("climate.anova_bluetooth", state, attributes)
+    hass.states.async_set("climate.anova_cooker", state, attributes)
 
-    result = await _render(hass, value_template, {"anova": "climate.anova_bluetooth"})
+    result = await _render(hass, value_template, {"anova": "climate.anova_cooker"})
     assert bool(result) is expected
 
 

@@ -19,7 +19,7 @@ from pytest_homeassistant_custom_component.common import (
     mock_restore_cache,
 )
 
-from custom_components.anova_bluetooth.const import DOMAIN
+from custom_components.anova_local.const import DOMAIN
 
 ADDRESS_UPPER = "<cooker BLE MAC, redacted>"
 ADDRESS_LOWER = "<cooker BLE MAC, redacted>"
@@ -108,14 +108,14 @@ async def _setup(
         return lambda: None
 
     monkeypatch.setattr(
-        "custom_components.anova_bluetooth.anova_client.establish_connection",
+        "custom_components.anova_local.anova_client.establish_connection",
         fake_establish,
     )
     monkeypatch.setattr(
-        "custom_components.anova_bluetooth.anova_client.POST_CONNECT_SETTLE", 0
+        "custom_components.anova_local.anova_client.POST_CONNECT_SETTLE", 0
     )
     monkeypatch.setattr(
-        "custom_components.anova_bluetooth.anova_client.REPLY_SETTLE", 0
+        "custom_components.anova_local.anova_client.REPLY_SETTLE", 0
     )
     monkeypatch.setattr(
         "homeassistant.components.bluetooth.async_ble_device_from_address",
@@ -183,7 +183,7 @@ async def test_number_sets_shared_preset_and_writes_device(hass, monkeypatch):
 
 async def test_number_restores_preset_after_restart(hass, monkeypatch):
     mock_restore_cache(
-        hass, [State("number.anova_bluetooth_cook_duration", "42")]
+        hass, [State("number.anova_cooker_cook_duration", "42")]
     )
 
     entry, _transport, _captured = await _setup(hass, monkeypatch)

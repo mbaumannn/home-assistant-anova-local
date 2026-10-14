@@ -1,4 +1,4 @@
-"""Constants for the Anova Bluetooth integration."""
+"""Constants for the Anova Cooker integration."""
 from __future__ import annotations
 
 from enum import Enum
@@ -6,8 +6,8 @@ from logging import Logger, getLogger
 
 LOGGER: Logger = getLogger(__package__)
 
-DOMAIN = "anova_bluetooth"
-NAME = "Anova Bluetooth"
+DOMAIN = "anova_local"
+NAME = "Anova Cooker"
 VERSION = "0.2.1"
 MANUFACTURER = "Anova Applied Electronics, Inc"
 

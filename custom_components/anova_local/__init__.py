@@ -1,4 +1,4 @@
-"""Set up the Anova Bluetooth integration."""
+"""Set up the Anova Cooker integration."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -33,7 +33,7 @@ PLATFORMS: list[Platform] = [
     Platform.BUTTON,
 ]
 
-_CARD_URL = "/anova_bluetooth/anova-cook-card.js"
+_CARD_URL = "/anova_local/anova-cook-card.js"
 _CARD_PATH = Path(__file__).parent / "frontend" / "anova-cook-card.js"
 _CARD_FLAG = f"{DOMAIN}_card_registered"
 
