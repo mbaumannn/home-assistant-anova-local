@@ -37,7 +37,9 @@ class FakeClient:
         cmd = bytes(data).decode().rstrip("\r")
         reply = self._responses.get(cmd, "ok\r")
         if self._cb is not None:
-            await self._cb(None, reply.encode())
+            result = self._cb(None, reply.encode())
+            if asyncio.iscoroutine(result):
+                await result
 
     async def disconnect(self):
         self.is_connected = False
@@ -99,8 +101,10 @@ class FragmentClient(FakeClient):
         reply = self._responses.get(cmd, "ok\r").encode()
         if self._cb is not None and reply:
             mid = max(1, len(reply) // 2)
-            await self._cb(None, bytearray(reply[:mid]))
-            await self._cb(None, bytearray(reply[mid:]))
+            for chunk in (reply[:mid], reply[mid:]):
+                result = self._cb(None, bytearray(chunk))
+                if asyncio.iscoroutine(result):
+                    await result
 
 
 class SilentClient(FakeClient):
@@ -173,7 +177,9 @@ class DelayedClient(FakeClient):
         async def _later() -> None:
             await asyncio.sleep(0.05)
             if self._cb is not None:
-                await self._cb(None, bytearray(reply))
+                result = self._cb(None, bytearray(reply))
+                if asyncio.iscoroutine(result):
+                    await result
 
         asyncio.create_task(_later())
 
@@ -190,7 +196,7 @@ async def test_start_notify_is_bounded(monkeypatch):
     monkeypatch.setattr(anova_client, "establish_connection", fake_establish)
     anova = anova_client.AnovaBLE(ble_device=object())
 
-    with pytest.raises(anova_client.AnovaCommandError):
+    with pytest.raises(anova_client.AnovaConnectionError):
         await anova.set_temp(50.0)
 
     assert created[0].is_connected is False
@@ -360,3 +366,47 @@ async def test_silence_sends_speaker_off(fake):
     await anova.silence()
 
     assert b"set speaker off\r" in fake.writes
+
+
+class StaleOnceClient(FakeClient):
+    """Replies with a stale token the first time for a given command."""
+
+    def __init__(self, responses: dict[str, str], stale: dict[str, str]):
+        super().__init__(responses)
+        self._stale = dict(stale)
+
+    async def write_gatt_char(self, _uuid, data, response=False):
+        self.writes.append(bytes(data))
+        cmd = bytes(data).decode().rstrip("\r")
+        if cmd in self._stale:
+            reply = self._stale.pop(cmd)
+        else:
+            reply = self._responses.get(cmd, "ok\r")
+        if self._cb is not None:
+            result = self._cb(None, reply.encode())
+            if asyncio.iscoroutine(result):
+                await result
+
+
+async def test_read_retries_on_a_stale_reply(monkeypatch):
+    # The cooker answers slowly, so the reply to an earlier command can still
+    # arrive during a read. The read must validate and retry instead of failing.
+    responses = {
+        "status": "stopped\r",
+        "read temp": "21.0\r",
+        "read set temp": "58.0\r",
+        "read timer": "0 stopped\r",
+        "read unit": "c\r",
+    }
+    client = StaleOnceClient(responses, {"read temp": "start\r"})
+
+    async def fake_establish(*_a, **_k):
+        return client
+
+    monkeypatch.setattr(anova_client, "establish_connection", fake_establish)
+    anova = anova_client.AnovaBLE(ble_device=object())
+
+    state = await anova.update_state()
+
+    assert state.status is AnovaStatus.STOPPED
+    assert state.current_temp == 21.0
