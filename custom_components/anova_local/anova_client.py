@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass
 
 from bleak_retry_connector import (
     BleakClient,
@@ -37,6 +36,7 @@ from .const import (
     AnovaStatus,
     AnovaUnit,
 )
+from .state import AnovaState  # noqa: F401  re-exported for the entities and the existing tests
 
 
 class AnovaError(Exception):
@@ -74,18 +74,6 @@ def parse_timer(raw: str) -> tuple[int, bool]:
 
 def parse_unit(raw: str) -> AnovaUnit:
     return AnovaUnit(_clean(raw).split()[0])
-
-
-@dataclass
-class AnovaState:
-    """A single snapshot of the cooker."""
-
-    status: AnovaStatus
-    current_temp: float
-    target_temp: float
-    timer_minutes: int
-    timer_running: bool
-    unit: AnovaUnit
 
 
 class AnovaBLE:
