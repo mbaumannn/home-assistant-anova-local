@@ -1,7 +1,7 @@
 /**
  * Anova Cook Card
  *
- * A sous-vide cook card for the Anova Bluetooth integration. It reuses Home
+ * A sous-vide cook card for the Anova Cooker integration. It reuses Home
  * Assistant's own `ha-control-circular-slider` (the same dial the thermostat
  * card uses), so the timer ring looks and behaves exactly like the temperature
  * ring: drag it to set the duration.
@@ -20,12 +20,12 @@
  */
 
 const DEFAULTS = {
-  start: "button.anova_bluetooth_start_cook",
-  stop: "button.anova_bluetooth_stop_cook",
-  duration: "number.anova_bluetooth_cook_duration",
-  remaining: "sensor.anova_bluetooth_timer_remaining",
-  status: "sensor.anova_bluetooth_status",
-  low_water: "binary_sensor.anova_bluetooth_low_water",
+  start: "button.anova_cooker_start_cook",
+  stop: "button.anova_cooker_stop_cook",
+  duration: "number.anova_cooker_cook_duration",
+  remaining: "sensor.anova_cooker_timer_remaining",
+  status: "sensor.anova_cooker_status",
+  low_water: "binary_sensor.anova_cooker_low_water",
 };
 
 class AnovaCookCard extends HTMLElement {
@@ -226,6 +226,6 @@ window.customCards = window.customCards || [];
 window.customCards.push({
   type: "anova-cook-card",
   name: "Anova Cook Card",
-  description: "Sous-vide cook card with a draggable duration dial for the Anova Bluetooth integration.",
+  description: "Sous-vide cook card with a draggable duration dial for the Anova Cooker integration.",
   preview: false,
 });

@@ -1,4 +1,4 @@
-"""Shared helpers for the Anova Bluetooth integration."""
+"""Shared helpers for the Anova Cooker integration."""
 from __future__ import annotations
 
 import re

@@ -14,7 +14,7 @@ from .util import format_ble_address
 
 
 class AnovaBluetoothConfigFlow(ConfigFlow, domain=DOMAIN):
-    """Config flow for Anova Bluetooth."""
+    """Config flow for Anova Cooker."""
 
     VERSION = 1
 

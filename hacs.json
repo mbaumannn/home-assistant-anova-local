@@ -1,5 +1,5 @@
 {
-  "name": "Anova Bluetooth",
+  "name": "Anova Cooker (local)",
   "render_readme": true,
   "homeassistant": "2026.5.0"
 }

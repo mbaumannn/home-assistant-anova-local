@@ -1,4 +1,4 @@
-"""Pytest configuration for the Anova Bluetooth integration tests."""
+"""Pytest configuration for the Anova Cooker integration tests."""
 from __future__ import annotations
 
 import sys
@@ -24,10 +24,10 @@ if _REPO_CUSTOM_COMPONENTS not in list(_custom_components.__path__):
 # Home Assistant is only needed by the integration tests. The protocol tests
 # import the component modules through a synthetic package so they stay fast
 # and independent of the Home Assistant install.
-COMPONENT_DIR = Path(__file__).parent / "custom_components" / "anova_bluetooth"
-_pkg = types.ModuleType("anova_bluetooth")
+COMPONENT_DIR = Path(__file__).parent / "custom_components" / "anova_local"
+_pkg = types.ModuleType("anova_local")
 _pkg.__path__ = [str(COMPONENT_DIR)]
-sys.modules.setdefault("anova_bluetooth", _pkg)
+sys.modules.setdefault("anova_local", _pkg)
 
 
 @pytest.fixture(autouse=True)

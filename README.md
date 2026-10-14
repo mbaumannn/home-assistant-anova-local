@@ -1,4 +1,4 @@
-# Anova Bluetooth for Home Assistant
+# Anova Cooker (local) for Home Assistant
 
 Local Home Assistant integration for Bluetooth Anova sous-vide cookers.
 No app, no cloud, no account. It uses Home Assistant's own `bluetooth`
@@ -9,16 +9,16 @@ Requires Home Assistant 2026.5.0 or newer.
 
 ## Installation (HACS)
 1. HACS > Integrations > menu > Custom repositories, add this repository with category Integration.
-2. Install "Anova Bluetooth" and restart Home Assistant.
+2. Install "Anova Cooker" and restart Home Assistant.
 3. Turn the cooker on. Home Assistant discovers it automatically, then select Configure, or add it manually with its MAC address.
 
 ## Entities
-- `climate.anova_bluetooth`: off/heat, target temperature, current water temperature
-- `number.anova_bluetooth_cook_duration`: stored duration preset in minutes, stays put during a cook
-- `switch.anova_bluetooth_timer`: start and stop the timer
-- `sensor.anova_bluetooth_status`: idle, cooking, low water
-- `sensor.anova_bluetooth_timer_remaining`: live remaining minutes
-- `button.anova_bluetooth_start_cook`: start heating and the timer in one tap
+- `climate.anova_cooker`: off/heat, target temperature, current water temperature
+- `number.anova_cooker_cook_duration`: stored duration preset in minutes, stays put during a cook
+- `switch.anova_cooker_timer`: start and stop the timer
+- `sensor.anova_cooker_status`: idle, cooking, low water
+- `sensor.anova_cooker_timer_remaining`: live remaining minutes
+- `button.anova_cooker_start_cook`: start heating and the timer in one tap
 
 Entity IDs depend on the device name; the list above shows the defaults.
 The timer starts on `start time` and runs on the wall clock, so warm-up time is

@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from anova_bluetooth.frame import FrameError, decode, encode
+from anova_local.frame import FrameError, decode, encode
 
 FIXTURES = Path(__file__).parent / "fixtures" / "anova_frames.csv"
 
