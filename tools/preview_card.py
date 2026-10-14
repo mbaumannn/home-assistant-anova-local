@@ -41,19 +41,21 @@ class StubSlider extends HTMLElement {
   _paint() {
     const span = this._max - this._min;
     const fraction = span > 0 ? Math.max(0, Math.min(1, (this._value - this._min) / span)) : 0;
-    const r = 116, cx = 150, cy = 150, width = 14, sweep = 270, start = 135;
+    // Home Assistant's own numbers, read from a live slider: radius 145 in a 320
+    // unit box, from 135 degrees over 270 degrees.
+    const cx = 160, cy = 160, r = 145, width = 20, sweep = 270, start = 135;
     const circumference = 2 * Math.PI * r, arc = circumference * (sweep / 360);
     const angle = ((start + sweep * fraction) * Math.PI) / 180;
     const knobX = cx + r * Math.cos(angle), knobY = cy + r * Math.sin(angle);
     this.shadowRoot.innerHTML = `
-      <svg viewBox="0 0 300 300" style="width:100%;display:block">
+      <svg viewBox="0 0 320 320" style="width:100%;display:block">
         <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="var(--divider-color)"
                 stroke-width="${width}" stroke-linecap="round"
                 stroke-dasharray="${arc} ${circumference}" transform="rotate(${start} ${cx} ${cy})"/>
         <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${this._colour}"
                 stroke-width="${width}" stroke-linecap="round"
                 stroke-dasharray="${arc * fraction} ${circumference}" transform="rotate(${start} ${cx} ${cy})"/>
-        <circle cx="${knobX}" cy="${knobY}" r="11" fill="#fff"/>
+        <circle cx="${knobX}" cy="${knobY}" r="14" fill="#fff"/>
       </svg>`;
   }
 }

@@ -1,10 +1,10 @@
 """The bundled card, rendered through node with a stub DOM.
 
 The card is the only part of this integration a user looks at, so it is rendered
-in every state and what ends up on screen is asserted — including the two things
-that are easy to break: the target temperature must be settable *before* a cook,
-and the countdown must stay visible while the ring shows the temperature.
-Skipped when node is not available.
+in every state and what ends up on screen is asserted — including the things that
+are easy to break: the target temperature must be settable before a cook, the
+countdown must count between - and +, and the water-temperature marker must land
+on the ring at the right place. Skipped when node is not available.
 """
 from __future__ import annotations
 
@@ -26,16 +26,13 @@ CARD = (
 
 pytestmark = pytest.mark.skipif(shutil.which("node") is None, reason="node is not installed")
 
-# The card only asks its shadow root for a handful of selectors, and it only needs
-# addEventListener for the dial, so a stub that answers those is enough to see what
-# a user would see and what the card would ask Home Assistant to do.
 STUBS = """
 const nodes = new Map();
 function makeElement() {
   const el = {
     textContent: "", innerHTML: "", hidden: false, disabled: false,
     min: 0, max: 0, step: 0, value: 0,
-    style: { setProperty() {}, width: "", background: "" },
+    style: { setProperty() {}, width: "", background: "", left: "", top: "" },
     classes: new Set(),
     listeners: {},
     addEventListener(type, fn) { el.listeners[type] = fn; },
@@ -56,8 +53,10 @@ const root = {
     return nodes.get(selector);
   },
 };
-// The markup starts the typing field hidden; a stub cannot parse HTML, so say so.
-nodes.set(".val-input", Object.assign(makeElement(), { hidden: true }));
+// The markup starts these hidden; a stub cannot parse HTML, so say so.
+for (const selector of [".val-input", ".cur", ".cap", ".dot"]) {
+  nodes.set(selector, Object.assign(makeElement(), { hidden: true }));
+}
 globalThis.HTMLElement = class {
   constructor() { this.shadowRoot = root; }
   attachShadow() { return root; }
@@ -97,13 +96,19 @@ for (const next of __AGAIN__) {
 console.log("RESULT " + JSON.stringify({
   state: at(".state").textContent,
   warns: at(".state").classes.has("warn"),
-  left: at(".left").textContent,
   center: at(".big").innerHTML,
-  cap: at(".cap").textContent,
+  cur: at(".cur").innerHTML,
+  curHidden: at(".cur").hidden,
+  capText: at(".cap").textContent,
+  capHidden: at(".cap").hidden,
+  dotHidden: at(".dot").hidden,
+  dotLeft: at(".dot").style.left,
+  dotTop: at(".dot").style.top,
   barHidden: at(".bar").hidden,
   barWidth: at(".fill").style.width,
-  stepperHidden: at(".dur").hidden,
-  stepperValue: at(".val").textContent,
+  valueBetween: at(".val").textContent,
+  minusHidden: at(".minus").hidden,
+  plusHidden: at(".plus").hidden,
   valHidden: at(".val").hidden,
   inputHidden: at(".val-input").hidden,
   inputValue: at(".val-input").value,
@@ -184,20 +189,38 @@ def render(
     return json.loads(line.removeprefix("RESULT "))
 
 
-def test_off_shows_the_temperature_dial_and_the_duration_stepper() -> None:
-    """Before a cook you set the temperature; the duration is the -/+ row."""
+def test_off_shows_the_target_large_with_the_water_temperature_below_it() -> None:
+    """The look that was preferred: big target, small unit, current temp under it."""
     out = render(states(status="idle"))
     assert out["state"] == "Off"
-    assert out["left"] == "water 24.5 °C"
-    assert "36.0" in out["center"]                 # the ring is the target temperature
-    assert out["cap"] == "target"
+    assert "36.0" in out["center"]
+    assert "<small>°C</small>" in out["center"]       # the unit stays small
+    assert "24.5 °C" in out["cur"]                    # the water temperature,
+    assert "mdi:thermometer" in out["cur"]            # with the thermometer
+    assert out["curHidden"] is False
+    assert out["capHidden"] is True                   # no "target" label needed
+    assert out["barHidden"] is True
+    assert out["valueBetween"] == "60 min"            # the preset
+    assert out["minusHidden"] is False                # -/+ stay available
     assert out["sliderValue"] == 36.0
     assert (out["sliderMin"], out["sliderMax"]) == (26.0, 46.0)
-    assert out["stepperHidden"] is False           # the duration is still settable
-    assert out["stepperValue"] == "60 min"
-    assert out["barHidden"] is True                # nothing is counting down
     assert out["startDisabled"] is False
     assert out["stopDisabled"] is True
+
+
+def test_the_water_temperature_is_a_marker_on_the_ring() -> None:
+    """A current temperature in the middle of the dial sits at the top of the ring."""
+    # The range is the target plus/minus ten, so 36.0 with a target of 36.0 is the
+    # middle of the arc: 135 + 270/2 = 270 degrees, which is the top of the dial.
+    out = render(states(status="idle", target=36.0, current=36.0))
+    assert out["dotHidden"] is False
+    assert abs(float(out["dotLeft"].rstrip("%")) - 50.0) < 0.5
+    assert abs(float(out["dotTop"].rstrip("%")) - 4.7) < 0.5
+
+    # A colder reading sits further back along the arc, on the knob's own scale.
+    cold = render(states(status="idle", target=36.0, current=26.0))
+    assert abs(float(cold["dotLeft"].rstrip("%")) - 18.0) < 0.5
+    assert abs(float(cold["dotTop"].rstrip("%")) - 82.0) < 0.5
 
 
 def test_the_target_temperature_can_be_set_before_the_cook() -> None:
@@ -212,24 +235,23 @@ def test_the_target_temperature_can_be_set_before_the_cook() -> None:
 
 
 def test_the_duration_can_still_be_set_before_the_cook() -> None:
-    """The stepper is the duration control now that the ring is the temperature."""
     out = render(states(status="idle", duration=60))
-    assert out["stepperHidden"] is False
-    assert out["stepperValue"] == "60 min"
-    assert "36.0" in out["center"]        # the ring shows the temperature, not the duration
+    assert out["valueBetween"] == "60 min"
+    assert out["minusHidden"] is False
+    assert "36.0" in out["center"]        # the ring shows the temperature now
 
 
-def test_cooking_shows_temperature_and_keeps_the_countdown_visible() -> None:
-    """The requirement: while the ring shows temperature, the timer stays in view."""
+def test_cooking_counts_down_between_minus_and_plus() -> None:
+    """The requirement: the remaining minutes live between - and +, not in a corner."""
     out = render(states(status="cooking", remaining=26))
     assert out["state"] == "Heating"              # 24.5 is below the 36.0 target
-    assert out["left"] == "26 min left"           # the countdown, always visible
+    assert out["valueBetween"] == "26 min"        # the countdown, exactly where the
+    assert out["minusHidden"] is True             # preset was; the buttons step aside
+    assert out["plusHidden"] is True
     assert out["barHidden"] is False
-    assert 40 < float(out["barWidth"].rstrip("%")) < 45    # 26 of 60 minutes
+    assert 40 < float(out["barWidth"].rstrip("%")) < 45        # 26 of 60 minutes
     assert "36.0" in out["center"]
-    assert out["cap"] == "water 24.5 °C"
-    assert out["stepperHidden"] is True            # the preset is not fiddled with mid-cook
-    assert out["sliderValue"] == 36.0
+    assert "24.5 °C" in out["cur"]
     assert out["startDisabled"] is True
     assert out["stopDisabled"] is False
 
@@ -250,30 +272,28 @@ def test_low_water_warns_and_refuses_to_start() -> None:
     assert out["state"] == "Low water"
     assert out["warns"] is True
     assert out["startDisabled"] is True
-    assert out["left"] == "26 min left"            # the countdown does not disappear
+    assert out["valueBetween"] == "26 min"        # the countdown does not disappear
 
 
 def test_a_cook_without_a_timer_says_so() -> None:
     out = render(states(status="cooking", remaining=0, duration=0))
-    assert out["left"] == "no timer"
+    assert out["valueBetween"] == "no timer"
     assert out["barHidden"] is True
     assert out["state"] == "Heating"
 
 
 def test_dragging_the_temperature_does_not_recentre_the_ring() -> None:
-    """The complaint from real use: after a drag the knob jumped back to the middle.
-
-    The dial used to be re-centred around the new target on every render, so the
-    knob always sat at 50%. The range now stays put as long as it contains the
-    target, which is what makes dragging feel like dragging.
-    """
-    out = render(states(status="idle", target=36.0), drag=40.0, again=[states(status="idle", target=40.0)])
+    """The complaint from real use: after a drag the knob jumped back to the middle."""
+    out = render(
+        states(status="idle", target=36.0),
+        drag=40.0,
+        again=[states(status="idle", target=40.0)],
+    )
     assert out["calls"][0]["data"]["temperature"] == 40.0
     assert out["trail"][0] == {"min": 26.0, "max": 46.0, "value": 40.0}   # not 30..50 / 50%
 
 
 def test_a_target_from_elsewhere_still_recentres_the_ring() -> None:
-    """An automation (or the cooker) can move the target outside the range."""
     out = render(states(status="idle", target=36.0), again=[states(status="idle", target=80.0)])
     assert out["trail"][0] == {"min": 70.0, "max": 90.0, "value": 80.0}
 
@@ -338,11 +358,21 @@ def test_escape_leaves_the_duration_alone() -> None:
     assert out["inputHidden"] is True
 
 
+def test_the_preset_cannot_be_typed_over_mid_cook() -> None:
+    """The number between -/+ is the countdown then, not something to edit."""
+    out = render(
+        states(status="cooking", remaining=26), actions='at(".val").onclick();'
+    )
+    assert out["inputHidden"] is True
+
+
 def test_without_a_climate_entity_the_ring_is_the_duration_dial() -> None:
     """A partial entity set still works, and then dragging sets the duration."""
     out = render(states(status="idle", with_climate=False), drag=90)
     assert "60" in out["center"] and "min" in out["center"]
-    assert out["cap"] == "duration"
+    assert out["capHidden"] is False and out["capText"] == "duration"
+    assert out["curHidden"] is True
+    assert out["dotHidden"] is True
     assert out["sliderValue"] == 60
     assert out["calls"][0]["service"] == "set_value"
     assert out["calls"][0]["data"] == {"entity_id": "number.anova_cooker_cook_duration", "value": 90}
