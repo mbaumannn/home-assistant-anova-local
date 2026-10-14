@@ -1,0 +1,39 @@
+blueprint:
+  name: Anova — melding op temperatuur
+  description: >
+    Meldt wanneer het water de doeltemperatuur bereikt tijdens het koken.
+  domain: automation
+  input:
+    climate_entity:
+      name: Anova climate
+      selector:
+        entity:
+          domain: climate
+    notify_target:
+      name: Melding naar
+      selector:
+        target:
+          entity:
+            domain: notify
+
+variables:
+  anova: !input climate_entity
+
+trigger:
+  - platform: template
+    value_template: >
+      {% set c = anova %}
+      {{ states(c) not in ['unknown', 'unavailable']
+         and state_attr(c, 'hvac_mode') == 'heat'
+         and state_attr(c, 'current_temperature') is not none
+         and state_attr(c, 'target_temperature') is not none
+         and state_attr(c, 'current_temperature') >= state_attr(c, 'target_temperature') }}
+
+action:
+  - action: notify.send_message
+    target: !input notify_target
+    data:
+      title: "Anova"
+      message: "Op temperatuur 🌡️"
+
+mode: single

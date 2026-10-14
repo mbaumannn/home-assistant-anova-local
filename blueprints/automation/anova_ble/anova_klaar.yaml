@@ -1,0 +1,45 @@
+blueprint:
+  name: Anova — klaar met koken
+  description: >
+    Meldt wanneer de Anova-timer afloopt (voltooid). Stopt de timer met nog tijd
+    over, dan is het een annulering en wordt er niet gemeld.
+  domain: automation
+  input:
+    timer_switch:
+      name: Anova timer-schakelaar
+      selector:
+        entity:
+          domain: switch
+    remaining_sensor:
+      name: Anova timer resterend
+      selector:
+        entity:
+          domain: sensor
+    notify_target:
+      name: Melding naar
+      selector:
+        target:
+          entity:
+            domain: notify
+
+variables:
+  remaining_entity: !input remaining_sensor
+
+trigger:
+  - platform: state
+    entity_id: !input timer_switch
+    from: "on"
+    to: "off"
+
+condition:
+  - condition: template
+    value_template: "{{ states(remaining_entity) | int(999) <= 1 }}"
+
+action:
+  - action: notify.send_message
+    target: !input notify_target
+    data:
+      title: "Anova"
+      message: "Je sous-vide is klaar 🍳"
+
+mode: single
