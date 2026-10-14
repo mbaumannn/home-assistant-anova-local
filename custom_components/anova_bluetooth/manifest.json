@@ -7,6 +7,7 @@
   "issue_tracker": "https://github.com/merijnbouwman/anova-ble/issues",
   "iot_class": "local_polling",
   "dependencies": ["bluetooth_adapters"],
+  "after_dependencies": ["frontend"],
   "requirements": ["bleak-retry-connector>=3.5.0"],
   "bluetooth": [
     {

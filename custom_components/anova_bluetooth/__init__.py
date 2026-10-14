@@ -1,6 +1,8 @@
 """Set up the Anova Bluetooth integration."""
 from __future__ import annotations
 
+from pathlib import Path
+
 from homeassistant.components import bluetooth
 from homeassistant.components.bluetooth import (
     BluetoothCallbackMatcher,
@@ -9,10 +11,13 @@ from homeassistant.components.bluetooth import (
     BluetoothServiceInfoBleak,
 )
 from homeassistant.components.bluetooth.match import ADDRESS
+from homeassistant.components.frontend import add_extra_js_url
+from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryNotReady
+from homeassistant.helpers.typing import ConfigType
 
 from .anova_client import AnovaBLE
 from .const import DOMAIN
@@ -28,8 +33,33 @@ PLATFORMS: list[Platform] = [
     Platform.BUTTON,
 ]
 
+_CARD_URL = "/anova_bluetooth/anova-cook-card.js"
+_CARD_PATH = Path(__file__).parent / "frontend" / "anova-cook-card.js"
+_CARD_FLAG = f"{DOMAIN}_card_registered"
+
+
+async def _async_register_card(hass: HomeAssistant) -> None:
+    """Serve and register the bundled Lovelace card (once)."""
+    if hass.data.get(_CARD_FLAG):
+        return
+    if "http" not in hass.config.components:
+        return
+    await hass.http.async_register_static_paths(
+        [StaticPathConfig(_CARD_URL, str(_CARD_PATH), cache_headers=False)]
+    )
+    hass.data[_CARD_FLAG] = True
+    if "frontend" in hass.config.components:
+        add_extra_js_url(hass, _CARD_URL)
+
+
+async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
+    """Register the bundled Lovelace card so users need no extra frontend cards."""
+    await _async_register_card(hass)
+    return True
+
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    await _async_register_card(hass)
     if entry.unique_id is None:
         raise ConfigEntryNotReady("no MAC address")
     # Normalize to the uppercase form Home Assistant uses for Bluetooth
