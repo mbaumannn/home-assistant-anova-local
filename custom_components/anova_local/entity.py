@@ -6,7 +6,14 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .anova_client import AnovaStatus
-from .const import DOMAIN, MANUFACTURER, NAME, VERSION
+from .const import (
+    CONF_TRANSPORT,
+    DOMAIN,
+    MANUFACTURER,
+    NAME,
+    TRANSPORT_WIFI,
+    VERSION,
+)
 from .coordinator import AnovaDataUpdateCoordinator
 
 
@@ -33,10 +40,17 @@ class AnovaEntity(CoordinatorEntity[AnovaDataUpdateCoordinator]):
         super().__init__(coordinator)
         assert coordinator.config_entry is not None
         mac = coordinator.config_entry.unique_id
+        # The model says which link is in use, because that is what a user asks
+        # about when the cooker does not answer.
+        transport = coordinator.config_entry.data.get(CONF_TRANSPORT)
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, mac)},
             name=NAME,
             manufacturer=MANUFACTURER,
-            model="Precision Cooker (BLE)",
+            model=(
+                "Precision Cooker (Wi-Fi)"
+                if transport == TRANSPORT_WIFI
+                else "Precision Cooker (Bluetooth)"
+            ),
             sw_version=VERSION,
         )
