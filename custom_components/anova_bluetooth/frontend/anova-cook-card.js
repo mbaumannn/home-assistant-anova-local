@@ -1,9 +1,9 @@
 /**
  * Anova Cook Card
  *
- * A sous-vide cook card for the Anova Bluetooth integration. The ring mirrors
- * the Home Assistant thermostat dial (same 300 degree arc and stroke) so the
- * two cards read as a matched pair.
+ * A sous-vide cook card for the Anova Bluetooth integration. It mirrors the
+ * Home Assistant thermostat card: a centred title, the same 300 degree dial
+ * geometry and size, and the controls below, so the two cards line up.
  *
  * Idle:  the ring shows the configured duration.
  * Cooking: the ring depletes with the remaining time.
@@ -25,7 +25,7 @@ const DEFAULTS = {
   low_water: "binary_sensor.anova_bluetooth_low_water",
 };
 
-// 300 degree arc, radius 108 (same geometry as the HA thermostat dial)
+// 300 degree arc, radius 108, in the same 300x210 viewBox as the HA dial
 const ARC_LENGTH = 108 * ((300 * Math.PI) / 180); // 565.5
 
 class AnovaCookCard extends HTMLElement {
@@ -47,7 +47,7 @@ class AnovaCookCard extends HTMLElement {
   }
 
   getCardSize() {
-    return 6;
+    return 8;
   }
 
   _id(kind) {
@@ -66,8 +66,10 @@ class AnovaCookCard extends HTMLElement {
         ha-card { height: 100%; box-sizing: border-box; }
         .wrap { height: 100%; box-sizing: border-box;
                 display: flex; flex-direction: column; align-items: center;
-                justify-content: center; gap: 14px; padding: 14px 16px; }
-        .ring { position: relative; width: 100%; max-width: 300px; margin: 0 auto; }
+                gap: 10px; padding: 12px 16px 16px; }
+        .header { align-self: stretch; text-align: center; font-size: 16px;
+                  font-weight: 500; color: var(--primary-text-color); }
+        .ring { position: relative; width: 100%; margin: 0 auto; }
         .ring svg { display: block; width: 100%; height: auto; }
         .track { fill: none; stroke: var(--secondary-background-color); stroke-width: 16;
                  stroke-linecap: round; }
@@ -75,20 +77,20 @@ class AnovaCookCard extends HTMLElement {
                 stroke-linecap: round; transition: stroke-dashoffset .6s ease; }
         .ring.low .prog { stroke: var(--warning-color, #e08a00); }
         .ring.idle .prog { opacity: .35; }
-        .center { position: absolute; left: 0; right: 0; top: 34%;
+        .center { position: absolute; left: 0; right: 0; top: 32%;
                   display: flex; flex-direction: column; align-items: center; gap: 2px; }
-        .big { font-size: 30px; font-weight: 400; line-height: 1;
+        .big { font-size: 34px; font-weight: 300; line-height: 1;
                font-variant-numeric: tabular-nums; }
-        .big small { font-size: 15px; color: var(--secondary-text-color); font-weight: 400; }
+        .big small { font-size: 16px; color: var(--secondary-text-color); font-weight: 400; }
         .cap { font-size: 12px; color: var(--secondary-text-color); }
-        .dur { display: flex; align-items: center; gap: 12px; }
-        .step { width: 40px; height: 40px; border-radius: 12px;
+        .dur { display: flex; align-items: center; gap: 14px; }
+        .step { width: 44px; height: 44px; border-radius: 22px;
                 border: 1px solid var(--divider-color);
                 background: var(--card-background-color); color: var(--primary-text-color);
-                font-size: 20px; line-height: 1; cursor: pointer; }
-        .val { min-width: 78px; text-align: center; font-size: 20px; font-weight: 600;
+                font-size: 22px; line-height: 1; cursor: pointer; }
+        .val { min-width: 84px; text-align: center; font-size: 22px; font-weight: 500;
                font-variant-numeric: tabular-nums; }
-        .btns { display: flex; gap: 10px; width: 100%; max-width: 300px; }
+        .btns { display: flex; gap: 10px; width: 100%; }
         button.act { flex: 1; height: 44px; border-radius: 22px; border: none; cursor: pointer;
                      font-size: 15px; font-weight: 600; }
         button.act:disabled { opacity: .4; cursor: default; }
@@ -98,6 +100,7 @@ class AnovaCookCard extends HTMLElement {
       </style>
       <ha-card>
         <div class="wrap">
+          <div class="header"></div>
           <div class="ring">
             <svg viewBox="0 0 300 210">
               <path class="track" d="M42 180 A108 108 0 1 1 258 180"></path>
@@ -176,6 +179,12 @@ class AnovaCookCard extends HTMLElement {
     const ring = root.querySelector(".ring");
     ring.classList.toggle("low", low);
     ring.classList.toggle("idle", !cooking);
+
+    root.querySelector(".header").textContent = low
+      ? "Low water"
+      : cooking
+        ? "Aan het koken"
+        : "Koken";
 
     if (cooking) {
       root.querySelector(".big").innerHTML = `${remaining}<small> min</small>`;

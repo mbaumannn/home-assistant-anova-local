@@ -20,7 +20,7 @@ from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers.typing import ConfigType
 
 from .anova_client import AnovaBLE
-from .const import DOMAIN, LOGGER, VERSION
+from .const import DOMAIN, LOGGER
 from .coordinator import AnovaDataUpdateCoordinator
 from .util import format_ble_address
 
@@ -49,12 +49,10 @@ async def _async_register_card(hass: HomeAssistant) -> None:
     )
     hass.data[_CARD_FLAG] = True
     if "frontend" in hass.config.components:
-        # Version query busts the browser cache when the card is updated.
-        url = f"{_CARD_URL}?v={VERSION}"
-        add_extra_js_url(hass, url)
+        add_extra_js_url(hass, _CARD_URL)
         # A Lovelace resource is loaded before a dashboard renders, so the card
         # is defined even when the extra module URL would arrive too late.
-        await _async_ensure_lovelace_resource(hass, url)
+        await _async_ensure_lovelace_resource(hass, _CARD_URL)
 
 
 async def _async_ensure_lovelace_resource(hass: HomeAssistant, url: str) -> None:
@@ -72,7 +70,17 @@ async def _async_ensure_lovelace_resource(hass: HomeAssistant, url: str) -> None
         return
     try:
         await resources.async_load()
-        if any(item.get("url") == url for item in resources.async_items()):
+        existing = next(
+            (
+                item
+                for item in resources.async_items()
+                if str(item.get("url", "")).startswith(_CARD_URL)
+            ),
+            None,
+        )
+        if existing is not None:
+            if existing.get("url") != url:
+                await resources.async_update_item(existing["id"], {"url": url})
             return
         await resources.async_create_item({"res_type": "module", "url": url})
     except Exception:  # noqa: BLE001
