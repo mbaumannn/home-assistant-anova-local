@@ -78,3 +78,56 @@ def decode(raw: bytes) -> str:
     if calculated != checksum:
         raise FrameError(f"checksum mismatch: read {checksum:#04x}, calculated {calculated:#04x}")
     return decoded.decode("ascii").rstrip(TERMINATOR)
+
+
+class FrameDecoder:
+    """Incremental parser for a byte stream: feed bytes, get whole messages.
+
+    TCP can split a frame anywhere, so the socket code must not parse frames
+    itself. Feed whatever the read returned; every complete message comes back in
+    order. Junk between frames and frames that fail their checksum are dropped.
+
+    The junk budget stops a broken or noisy link from growing the buffer without
+    bound: more than :data:`MAX_FRAME` junk bytes raise :class:`FrameError`, and
+    the budget resets once a valid frame is seen.
+    """
+
+    __slots__ = ("_buffer", "_junk")
+
+    def __init__(self) -> None:
+        self._buffer = bytearray()
+        self._junk = 0
+
+    @property
+    def pending(self) -> bytes:
+        """Bytes of a frame that has not fully arrived yet."""
+        return bytes(self._buffer)
+
+    def feed(self, data: bytes) -> list[str]:
+        """Add received bytes and return every complete message, in order."""
+        self._buffer.extend(data)
+        messages: list[str] = []
+        while self._buffer:
+            if self._buffer[0] != FRAME_HEAD:
+                del self._buffer[0]
+                self._count_junk(1)
+                continue
+            if len(self._buffer) < 2:
+                break
+            total = self._buffer[1] + 4  # header + length + payload + checksum + 0x16
+            if len(self._buffer) < total:
+                break
+            raw = bytes(self._buffer[:total])
+            del self._buffer[:total]
+            try:
+                messages.append(decode(raw))
+            except FrameError:
+                self._count_junk(total)
+                continue
+            self._junk = 0
+        return messages
+
+    def _count_junk(self, amount: int) -> None:
+        self._junk += amount
+        if self._junk > MAX_FRAME:
+            raise FrameError(f"more than {MAX_FRAME} bytes without a valid frame")
