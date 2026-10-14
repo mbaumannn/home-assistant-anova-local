@@ -1,18 +1,21 @@
 /**
  * Anova Cook Card
  *
- * A sous-vide cook card for the Anova Bluetooth integration. It mirrors the
- * Home Assistant thermostat card: a centred title, the same 300 degree dial
- * geometry and size, and the controls below, so the two cards line up.
+ * A sous-vide cook card for the Anova Bluetooth integration. It reuses Home
+ * Assistant's own `ha-control-circular-slider` (the same dial the thermostat
+ * card uses), so the timer ring looks and behaves exactly like the temperature
+ * ring: drag it to set the duration.
  *
- * Idle:  the ring shows the configured duration.
- * Cooking: the ring depletes with the remaining time.
+ * Idle:    drag the ring (or use -/+) to set the duration.
+ * Cooking: the ring shows the remaining time and is not draggable.
  *
- * Registered automatically by the integration; no extra frontend cards needed.
+ * Registered automatically by the integration.
  *
  * Config:
  *   type: custom:anova-cook-card
- *   entities:            # optional overrides
+ *   max: 240                 # duration dial range in minutes (default 240)
+ *   step: 5                  # drag step in minutes (default 5)
+ *   entities:                # optional overrides
  *     start / stop / duration / remaining / status / low_water
  */
 
@@ -24,9 +27,6 @@ const DEFAULTS = {
   status: "sensor.anova_bluetooth_status",
   low_water: "binary_sensor.anova_bluetooth_low_water",
 };
-
-// 300 degree arc, radius 108, in the same 300x210 viewBox as the HA dial
-const ARC_LENGTH = 108 * ((300 * Math.PI) / 180); // 565.5
 
 class AnovaCookCard extends HTMLElement {
   constructor() {
@@ -47,7 +47,7 @@ class AnovaCookCard extends HTMLElement {
   }
 
   getCardSize() {
-    return 8;
+    return 10;
   }
 
   _id(kind) {
@@ -66,23 +66,15 @@ class AnovaCookCard extends HTMLElement {
         ha-card { height: 100%; box-sizing: border-box; }
         .wrap { height: 100%; box-sizing: border-box;
                 display: flex; flex-direction: column; align-items: center;
-                gap: 10px; padding: 12px 16px 16px; }
-        .header { align-self: stretch; text-align: center; font-size: 16px;
-                  font-weight: 500; color: var(--primary-text-color); }
-        .ring { position: relative; width: 100%; margin: 0 auto; }
-        .ring svg { display: block; width: 100%; height: auto; }
-        .track { fill: none; stroke: var(--secondary-background-color); stroke-width: 16;
-                 stroke-linecap: round; }
-        .prog { fill: none; stroke: var(--primary-color); stroke-width: 16;
-                stroke-linecap: round; transition: stroke-dashoffset .6s ease; }
-        .ring.low .prog { stroke: var(--warning-color, #e08a00); }
-        .ring.idle .prog { opacity: .35; }
-        .center { position: absolute; left: 0; right: 0; top: 56%;
-                  transform: translateY(-50%);
-                  display: flex; flex-direction: column; align-items: center; gap: 2px;
-                  pointer-events: none; }
+                gap: 8px; padding: 12px 16px 16px; }
+        .title { font-size: 16px; font-weight: 500; color: var(--primary-text-color); }
+        .dial { position: relative; width: 320px; max-width: 100%; flex: 0 0 auto; }
+        ha-control-circular-slider { width: 100% !important; display: block; }
+        .center { position: absolute; inset: 0; display: flex; flex-direction: column;
+                  align-items: center; justify-content: center; gap: 2px;
+                  padding-bottom: 15%; pointer-events: none; }
         .big { font-size: 34px; font-weight: 300; line-height: 1;
-               font-variant-numeric: tabular-nums; }
+               font-variant-numeric: tabular-nums; color: var(--primary-text-color); }
         .big small { font-size: 16px; color: var(--secondary-text-color); font-weight: 400; }
         .cap { font-size: 12px; color: var(--secondary-text-color); }
         .dur { display: flex; align-items: center; gap: 14px; }
@@ -102,13 +94,9 @@ class AnovaCookCard extends HTMLElement {
       </style>
       <ha-card>
         <div class="wrap">
-          <div class="header"></div>
-          <div class="ring">
-            <svg viewBox="0 0 300 210">
-              <path class="track" d="M42 180 A108 108 0 1 1 258 180"></path>
-              <path class="prog" d="M42 180 A108 108 0 1 1 258 180"
-                    stroke-dasharray="${ARC_LENGTH}" stroke-dashoffset="0"></path>
-            </svg>
+          <div class="title"></div>
+          <div class="dial">
+            <ha-control-circular-slider mode="start"></ha-control-circular-slider>
             <div class="center"><div class="big"></div><div class="cap"></div></div>
           </div>
           <div class="dur">
@@ -123,19 +111,41 @@ class AnovaCookCard extends HTMLElement {
         </div>
       </ha-card>
     `;
-    this.shadowRoot.querySelector(".minus").onclick = () => this._step(-5);
-    this.shadowRoot.querySelector(".plus").onclick = () => this._step(5);
+    this._slider = this.shadowRoot.querySelector("ha-control-circular-slider");
+    this._slider.addEventListener("value-changed", (ev) =>
+      this._onSliderChanged(ev)
+    );
+    this.shadowRoot.querySelector(".minus").onclick = () =>
+      this._stepBy(-this._stepSize());
+    this.shadowRoot.querySelector(".plus").onclick = () =>
+      this._stepBy(this._stepSize());
     this.shadowRoot.querySelector(".start").onclick = () => this._start();
     this.shadowRoot.querySelector(".stop").onclick = () => this._stop();
   }
 
-  _step(delta) {
-    const dur = Number(this._state(this._id("duration"))) || 0;
-    const value = Math.max(0, Math.min(6000, dur + delta));
+  _stepSize() {
+    return Number(this._config?.step) || 5;
+  }
+
+  _onSliderChanged(ev) {
+    if (this._suppressSlider) return;
+    const value = Number(ev.detail?.value);
+    if (!Number.isFinite(value)) return;
+    const duration = Math.max(0, Math.round(value));
+    this._setDuration(duration);
+  }
+
+  _setDuration(value) {
     this._hass.callService("number", "set_value", {
       entity_id: this._id("duration"),
       value,
     });
+  }
+
+  _stepBy(delta) {
+    const dur = Number(this._state(this._id("duration"))) || 0;
+    const next = Math.max(0, Math.min(6000, dur + delta));
+    this._setDuration(next);
   }
 
   _start() {
@@ -172,17 +182,25 @@ class AnovaCookCard extends HTMLElement {
     }
     const cooking = this._pending === "start" || status === "cooking";
 
-    const pct = cooking
-      ? duration
-        ? Math.max(0, Math.min(1, remaining / duration))
-        : 1
-      : 1; // idle: the ring shows the full configured duration
-    root.querySelector(".prog").style.strokeDashoffset = String(ARC_LENGTH * (1 - pct));
-    const ring = root.querySelector(".ring");
-    ring.classList.toggle("low", low);
-    ring.classList.toggle("idle", !cooking);
+    // The dial range: while cooking it is the configured duration so the ring
+    // empties with the remaining time; while idle it is the configured max.
+    const max = cooking ? Math.max(duration, 1) : Number(this._config?.max) || 240;
+    const value = cooking ? Math.min(remaining, max) : duration;
 
-    root.querySelector(".header").textContent = low
+    // Avoid echoing a programmatic value change back to the service.
+    this._suppressSlider = true;
+    this._slider.min = 0;
+    this._slider.max = max;
+    this._slider.step = this._stepSize();
+    this._slider.value = value;
+    this._slider.disabled = cooking;
+    this._slider.style.setProperty(
+      "--control-circular-slider-color",
+      low ? "var(--warning-color, #e08a00)" : "var(--primary-color)"
+    );
+    this._suppressSlider = false;
+
+    root.querySelector(".title").textContent = low
       ? "Low water"
       : cooking
         ? "Cooking"
@@ -208,6 +226,6 @@ window.customCards = window.customCards || [];
 window.customCards.push({
   type: "anova-cook-card",
   name: "Anova Cook Card",
-  description: "Sous-vide cook card with a countdown ring for the Anova Bluetooth integration.",
+  description: "Sous-vide cook card with a draggable duration dial for the Anova Bluetooth integration.",
   preview: false,
 });
