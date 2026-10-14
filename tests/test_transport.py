@@ -102,6 +102,31 @@ async def test_disconnect_drops_the_link_but_keeps_listening() -> None:
             await server.close()
 
 
+async def test_actions_the_cooker_answers_with_an_event_are_not_errors() -> None:
+    """The real cooker answers `stop time` with an event, not with a reply.
+
+    Reported from real use: pressing Stop after a cook failed with
+    "no reply to 'stop time'". Silence on an action is normal, and must not count
+    towards closing the link either.
+    """
+    async with FakeCooker(timer_running=True) as cooker:
+        server = AnovaLocalServer("127.0.0.1", 0, timings=FAST)
+        await server.listen()
+        try:
+            await cooker.dial(server.server_port)
+            await server.connect()
+            for _ in range(4):          # one miss per action would close the link
+                await server.start()
+                await server.stop()
+                await server.start_timer()
+                await server.stop_timer()
+            await server.silence()      # the capture shows no reply to this one either
+            assert server.connected
+            assert "stop time" in cooker.commands
+        finally:
+            await server.close()
+
+
 async def test_connect_returns_when_no_cooker_ever_dials_in() -> None:
     """Home Assistant must be able to set up while the cooker is switched off."""
     server = AnovaLocalServer("127.0.0.1", 0, timings=FAST)

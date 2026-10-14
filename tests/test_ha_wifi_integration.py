@@ -128,6 +128,31 @@ async def test_another_cooker_dialling_in_is_ignored(hass, enable_custom_integra
         assert hass.states.get("sensor.anova_cooker_status").state == "unavailable"
 
 
+async def test_pressing_stop_after_a_cook_does_not_error(hass, enable_custom_integrations) -> None:
+    """The report from real use: Stop failed with "no reply to 'stop time'"."""
+    entry = wifi_entry()
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    server = hass.data[DOMAIN][entry.entry_id].client
+    async with FakeCooker(status="running", timer=45, timer_running=True) as cooker:
+        await cooker.dial(server.server_port)
+        assert await wait_for_state(hass, "sensor.anova_cooker_status", "cooking") == "cooking"
+
+        # blocking=True makes Home Assistant raise if the entity raises, which is
+        # exactly what the user saw. The fake cooker answers stop/stop time with an
+        # event, like the real one, so this must not raise.
+        await hass.services.async_call(
+            "button", "press", {"entity_id": "button.anova_cooker_stop_cook"}, blocking=True
+        )
+
+        assert "stop" in cooker.commands
+        assert "stop time" in cooker.commands
+        assert cooker.status == "stopped"
+        assert cooker.timer_running is False
+
+
 async def test_the_device_says_which_link_is_in_use(hass, enable_custom_integrations) -> None:
     entry = wifi_entry()
     entry.add_to_hass(hass)

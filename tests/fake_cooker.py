@@ -46,6 +46,14 @@ class FakeCooker:
         self.speaker = speaker
         self.mute_after_handshake = mute_after_handshake
         self.commands: list[str] = []
+        # Actions the cooker answers with an event instead of a reply. Observed on
+        # the real device: `stop time` -> "event ble time stop", `start time` ->
+        # "event wifi time start", `stop` -> "event wifi stop".
+        self.events_after: dict[str, str] = {
+            "start time": "event wifi time start",
+            "stop time": "event ble time stop",
+            "stop": "event wifi stop",
+        }
         self.reader: asyncio.StreamReader | None = None
         self.writer: asyncio.StreamWriter | None = None
         self._host = host
@@ -122,6 +130,9 @@ class FakeCooker:
                     if reply is not None and self._answers_now():
                         writer.write(encode(reply))
                         await writer.drain()
+                    if (event := self.events_after.get(command)) and self._answers_now():
+                        writer.write(encode(event))
+                        await writer.drain()
         except (ConnectionResetError, OSError):
             return
 
@@ -163,15 +174,15 @@ class FakeCooker:
             return "ok"
         if command == "stop":
             self.status = "stopped"
-            return "ok"
+            return None              # the real cooker answers with "event wifi stop"
         if command == "start time":
             self.timer_running = True
-            return None              # the real cooker answers this one with silence
+            return None              # answered with "event wifi time start"
         if command == "stop time":
             self.timer_running = False
-            return "ok"
+            return None              # answered with "event ble time stop"
         if command == "clear alarm":
-            return "ok"
+            return None              # the capture shows no reply to this one
         if command == "set speaker on":
             self.speaker = True
             return "ok"

@@ -94,24 +94,36 @@ async def test_set_commands_change_the_state_it_reports() -> None:
         link.close()
 
 
-async def test_start_and_stop_are_acknowledged() -> None:
+async def test_start_is_acknowledged_and_stop_sends_an_event() -> None:
     async with FakeCooker() as cooker:
         link = await channel(cooker)
         await link.send("start")
         assert await link.message() == "ok"
         assert cooker.status == "running"
+
         await link.send("stop")
-        assert await link.message() == "ok"
+        # The real cooker answers `stop` with an event, not with a reply; the
+        # capture in tests/fixtures shows exactly this.
+        assert await link.message() == "event wifi stop"
         assert cooker.status == "stopped"
         link.close()
 
 
-async def test_start_time_stays_silent_like_the_real_cooker() -> None:
+async def test_start_time_is_answered_with_an_event() -> None:
     async with FakeCooker() as cooker:
         link = await channel(cooker)
         await link.send("start time")
-        await link.expect_silence()
-        assert cooker.timer_running is True       # the state did change
+        assert await link.message() == "event wifi time start"
+        assert cooker.timer_running is True
+        link.close()
+
+
+async def test_stop_time_is_answered_with_an_event() -> None:
+    async with FakeCooker(timer_running=True) as cooker:
+        link = await channel(cooker)
+        await link.send("stop time")
+        assert await link.message() == "event ble time stop"
+        assert cooker.timer_running is False
         link.close()
 
 
