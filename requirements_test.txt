@@ -1,0 +1,4 @@
+pytest>=8.0
+pytest-asyncio>=0.23
+bleak>=0.22
+bleak-retry-connector>=3.5
