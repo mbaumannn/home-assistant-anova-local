@@ -77,8 +77,10 @@ class AnovaCookCard extends HTMLElement {
                 stroke-linecap: round; transition: stroke-dashoffset .6s ease; }
         .ring.low .prog { stroke: var(--warning-color, #e08a00); }
         .ring.idle .prog { opacity: .35; }
-        .center { position: absolute; left: 0; right: 0; top: 32%;
-                  display: flex; flex-direction: column; align-items: center; gap: 2px; }
+        .center { position: absolute; left: 0; right: 0; top: 56%;
+                  transform: translateY(-50%);
+                  display: flex; flex-direction: column; align-items: center; gap: 2px;
+                  pointer-events: none; }
         .big { font-size: 34px; font-weight: 300; line-height: 1;
                font-variant-numeric: tabular-nums; }
         .big small { font-size: 16px; color: var(--secondary-text-color); font-weight: 400; }
@@ -183,15 +185,15 @@ class AnovaCookCard extends HTMLElement {
     root.querySelector(".header").textContent = low
       ? "Low water"
       : cooking
-        ? "Aan het koken"
-        : "Koken";
+        ? "Cooking"
+        : "Cook";
 
     if (cooking) {
       root.querySelector(".big").innerHTML = `${remaining}<small> min</small>`;
-      root.querySelector(".cap").textContent = `van ${duration} min`;
+      root.querySelector(".cap").textContent = `of ${duration} min`;
     } else {
       root.querySelector(".big").innerHTML = `${duration}<small> min</small>`;
-      root.querySelector(".cap").textContent = "kookduur";
+      root.querySelector(".cap").textContent = "duration";
     }
     root.querySelector(".val").textContent = `${duration} min`;
 
