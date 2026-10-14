@@ -63,7 +63,7 @@ class FakeCooker:
         if self._server is not None:
             self._server.close()
             with contextlib.suppress(Exception):
-                await self._server.wait_closed()
+                await asyncio.wait_for(self._server.wait_closed(), 1.0)
             self._server = None
 
     @property
@@ -95,6 +95,10 @@ class FakeCooker:
 
     async def emit(self, message: str) -> None:
         """Send an unsolicited event line, as the cooker does while a cook changes."""
+        for _ in range(200):                       # the accept callback may not have run yet
+            if self.writer is not None:
+                break
+            await asyncio.sleep(0.01)
         assert self.writer is not None, "not connected"
         self.writer.write(encode(message))
         await self.writer.drain()
@@ -110,6 +114,7 @@ class FakeCooker:
             while True:
                 chunk = await reader.read(1024)
                 if not chunk:
+                    writer.close()          # the cooker hangs up when we do
                     return
                 for command in decoder.feed(chunk):
                     self.commands.append(command)
