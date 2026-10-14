@@ -155,7 +155,7 @@ class AnovaBLE:
         async with self._cmd_lock:
             await self._async_disconnect_locked()
 
-    async def _command(self, command: str, *, expect_reply: bool = True) -> str:
+    async def _command(self, command: str, *, expect_reply: bool | None = True) -> str:
         queue: asyncio.Queue[bytes] = asyncio.Queue()
 
         async def _cb(_char, data: bytearray) -> None:
@@ -174,7 +174,12 @@ class AnovaBLE:
                     await client.start_notify(CHAR_UUID, _cb)
                 async with asyncio.timeout(WRITE_TIMEOUT):
                     await client.write_gatt_char(CHAR_UUID, payload, response=False)
-                reply_timeout = COMMAND_TIMEOUT if expect_reply else REPLY_SETTLE
+                # True: a reply is required (read/set commands).
+                # None: a reply is optional (for example `start`, which echoes
+                #       `start` on firmware 6.1.1). Wait the full timeout so the
+                #       echo is consumed and cannot leak into the next command.
+                # False: a silent action (for example `start time`), short wait.
+                reply_timeout = REPLY_SETTLE if expect_reply is False else COMMAND_TIMEOUT
                 try:
                     async with asyncio.timeout(reply_timeout):
                         # Frame on the terminator: an answer may arrive over
@@ -182,11 +187,10 @@ class AnovaBLE:
                         while COMMAND_TERMINATOR.encode() not in buffer:
                             buffer.extend(await queue.get())
                 except TimeoutError:
-                    if expect_reply:
+                    if expect_reply is True:
                         raise
-                    # Action commands such as `start time` are accepted by the
-                    # cooker without a reply.
-                    LOGGER.debug("Anova %r: no reply (action command)", command)
+                    # The cooker accepted the action without a reply.
+                    LOGGER.debug("Anova %r: no reply (optional action)", command)
             except TimeoutError as err:
                 # Drop the connection so a late reply cannot land on the next
                 # command.
@@ -229,8 +233,8 @@ class AnovaBLE:
         await self._command(CMD_SET_UNIT.format(unit=unit.value))
 
     async def start(self) -> None:
-        # `start` may be accepted by the cooker without a reply.
-        await self._command(CMD_START, expect_reply=False)
+        # `start` echoes `start` on firmware 6.1.1; the echo must be consumed.
+        await self._command(CMD_START, expect_reply=None)
 
     async def stop(self) -> None:
         await self._command(CMD_STOP)

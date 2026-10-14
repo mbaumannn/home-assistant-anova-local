@@ -331,3 +331,23 @@ async def test_silent_action_command_is_not_an_error(monkeypatch):
 
     assert created[0].is_connected is True  # connection kept
     assert b"start time\r" in created[0].writes
+
+
+async def test_optional_action_command_tolerates_silence(monkeypatch):
+    # `start` echoes `start` on firmware 6.1.1 but may be silent elsewhere; the
+    # client must not fail when the reply is missing.
+    monkeypatch.setattr(anova_client, "COMMAND_TIMEOUT", 0.1)
+    created: list[FakeClient] = []
+
+    async def fake_establish(*_a, **_k):
+        client = SilentClient({})
+        created.append(client)
+        return client
+
+    monkeypatch.setattr(anova_client, "establish_connection", fake_establish)
+    anova = anova_client.AnovaBLE(ble_device=object())
+
+    await anova.start()
+
+    assert created[0].is_connected is True
+    assert b"start\r" in created[0].writes
