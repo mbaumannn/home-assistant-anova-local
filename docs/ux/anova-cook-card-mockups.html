@@ -22,7 +22,7 @@
   .header{text-align:center;font-size:16px;font-weight:500}
   .dial{position:relative;width:100%}
   .dial svg{display:block;width:100%;height:auto}
-  .center{position:absolute;left:0;right:0;top:32%;text-align:center}
+  .center{position:absolute;left:0;right:0;top:56%;transform:translateY(-50%);text-align:center}
   .big{font-size:34px;font-weight:300;line-height:1;font-variant-numeric:tabular-nums}
   .big small{font-size:16px;color:var(--muted);font-weight:400}
   .cap{font-size:12px;color:var(--muted);margin-top:2px}
@@ -63,13 +63,13 @@
     </div></div></div>
 
     <div class="cell"><div class="card"><div class="col">
-      <div class="header">Koken</div>
+      <div class="header">Cook</div>
       <div class="dial">
         <svg viewBox="0 0 300 210">
           <path d="M42 180 A108 108 0 1 1 258 180" fill="none" stroke="var(--track)" stroke-width="16" stroke-linecap="round"/>
           <path d="M42 180 A108 108 0 1 1 258 180" fill="none" stroke="var(--accent)" stroke-width="16" stroke-linecap="round" opacity=".35"/>
         </svg>
-        <div class="center"><div class="big">5<small> min</small></div><div class="cap">kookduur</div></div>
+        <div class="center"><div class="big">5<small> min</small></div><div class="cap">duration</div></div>
       </div>
       <div class="steprow"><span class="sq">−</span><span class="val">5 min</span><span class="sq">＋</span></div>
       <div class="btns"><span class="act start">Start cook</span><span class="act stop" data-disabled="1">Stop</span></div>
@@ -95,14 +95,14 @@
     </div></div></div>
 
     <div class="cell"><div class="card"><div class="col">
-      <div class="header">Aan het koken</div>
+      <div class="header">Cooking</div>
       <div class="dial">
         <svg viewBox="0 0 300 210">
           <path d="M42 180 A108 108 0 1 1 258 180" fill="none" stroke="var(--track)" stroke-width="16" stroke-linecap="round"/>
           <path d="M42 180 A108 108 0 1 1 258 180" fill="none" stroke="var(--accent)" stroke-width="16" stroke-linecap="round"
                 stroke-dasharray="565.5" stroke-dashoffset="141.4"/>
         </svg>
-        <div class="center"><div class="big">68<small> min</small></div><div class="cap">van 90 min</div></div>
+        <div class="center"><div class="big">68<small> min</small></div><div class="cap">of 90 min</div></div>
       </div>
       <div class="steprow"><span class="sq">−</span><span class="val">90 min</span><span class="sq">＋</span></div>
       <div class="btns"><span class="act start" data-disabled="1">Start cook</span><span class="act stop">Stop</span></div>
