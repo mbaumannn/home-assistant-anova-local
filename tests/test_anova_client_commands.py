@@ -10,6 +10,13 @@ from anova_bluetooth import anova_client
 from anova_bluetooth.const import AnovaStatus, AnovaUnit
 
 
+@pytest.fixture(autouse=True)
+def _no_connect_settle(monkeypatch):
+    """Keep tests fast: the settle delays are exercised in the HA tests."""
+    monkeypatch.setattr(anova_client, "POST_CONNECT_SETTLE", 0)
+    monkeypatch.setattr(anova_client, "REPLY_SETTLE", 0)
+
+
 class FakeClient:
     """Replaces BleakClient: records writes and returns a canned answer."""
 
@@ -304,3 +311,23 @@ async def test_start_cook_uses_current_preset_on_each_start(fake):
         b"start\r",
         b"start time\r",
     ]
+
+
+async def test_silent_action_command_is_not_an_error(monkeypatch):
+    # `start time` (and `start`) are accepted by the cooker without a reply and
+    # must not be treated as a failure.
+    monkeypatch.setattr(anova_client, "REPLY_SETTLE", 0.05)
+    created: list[FakeClient] = []
+
+    async def fake_establish(*_a, **_k):
+        client = SilentClient({})
+        created.append(client)
+        return client
+
+    monkeypatch.setattr(anova_client, "establish_connection", fake_establish)
+    anova = anova_client.AnovaBLE(ble_device=object())
+
+    await anova.start_timer()
+
+    assert created[0].is_connected is True  # connection kept
+    assert b"start time\r" in created[0].writes

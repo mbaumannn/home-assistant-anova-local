@@ -9,7 +9,7 @@ from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
 from homeassistant.const import CONF_ADDRESS
 
 from .anova_client import AnovaBLE
-from .const import DOMAIN, NAME
+from .const import DOMAIN, LOGGER, NAME
 from .util import format_ble_address
 
 
@@ -82,7 +82,8 @@ class AnovaBluetoothConfigFlow(ConfigFlow, domain=DOMAIN):
         try:
             await anova.connect()
             await anova.update_state()
-        except Exception:  # noqa: BLE001
+        except Exception as err:  # noqa: BLE001
+            LOGGER.debug("Anova %s did not validate: %s", address, err)
             return "unsupported"
         finally:
             await anova.disconnect()
