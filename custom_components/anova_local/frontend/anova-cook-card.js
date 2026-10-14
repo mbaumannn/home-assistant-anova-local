@@ -1,30 +1,26 @@
 /**
  * Anova Cook Card
  *
- * One card for the whole cooker, so nothing has to line up with a second card.
- * It reuses Home Assistant's own `ha-control-circular-slider` (the dial the
- * thermostat card uses), so the ring looks and behaves like Home Assistant
- * already looks and behaves.
+ * Built to look like Home Assistant's own thermostat card, because that is the
+ * card it replaces: the same dial, the same typography, the same colours —
+ * blue while you are setting up, the heat colour while it works. One thing is
+ * ours: the timer. The remaining minutes sit between - and +, exactly where the
+ * duration preset sits before a cook, with a progress bar above them.
  *
- * The ring is the target temperature, always: that is what you set before a cook
- * and watch while it runs. The duration is set with the -/+ row while the cooker
- * is off, and the countdown is never hidden:
+ *   Off        blue ring on the target temperature; -/+ set the duration.
+ *   Heating    orange ring, still on the target temperature, with the water
+ *   Cooking    temperature as the marker Home Assistant's own dial draws, and the
+ *              countdown between - and +.
+ *   Low water  the warning colour, and Start is refused.
  *
- *   Off      the ring sets the target temperature; -/+ sets the duration.
- *   Heating  the ring keeps setting the temperature; the water temperature sits
- *   Cooking  under it and the remaining time is in the top right, with a progress
- *            bar underneath, so it stays visible while the ring shows temperature.
- *   Low water the ring turns to the warning colour and Start is refused.
- *
- * If the climate entity is missing (a partial entity set), the ring falls back to
- * being the duration dial.
- *
- * Registered automatically by the integration.
+ * The numbers follow Home Assistant's own `ha-big-number`: 44px for the digits,
+ * the decimal at 0.42em and the unit at 0.33em. The values for those, for the
+ * label sizes and for the marker were read from a live card, not guessed.
  *
  * Config:
  *   type: custom:anova-cook-card
  *   max: 240                 # duration dial range in minutes (default 240)
- *   step: 5                  # drag step in minutes (default 5)
+ *   step: 5                  # drag/step size in minutes (default 5)
  *   entities:                # optional overrides
  *     start / stop / duration / remaining / status / low_water / climate
  */
@@ -42,6 +38,12 @@ const DEFAULTS = {
 // How far the temperature ring reaches around the target, like Home Assistant's
 // own climate card, so dragging stays precise.
 const TEMP_RANGE = 10;
+
+// Home Assistant's thermostat card reserves a title bar of this height, and its
+// text block sits slightly above the middle of the dial because the dial has a gap
+// at the bottom.
+const TITLE_HEIGHT = 48;
+const INFO_LIFT = 3.5; // per cent of the dial's width
 
 class AnovaCookCard extends HTMLElement {
   constructor() {
@@ -62,7 +64,7 @@ class AnovaCookCard extends HTMLElement {
   }
 
   getCardSize() {
-    return 10;
+    return 11;
   }
 
   _id(kind) {
@@ -106,42 +108,47 @@ class AnovaCookCard extends HTMLElement {
     this.shadowRoot.innerHTML = `
       <style>
         :host { display: block; height: 100%; }
-        ha-card { height: 100%; box-sizing: border-box; }
-        .wrap { height: 100%; box-sizing: border-box;
-                display: flex; flex-direction: column; align-items: center;
-                gap: 10px; padding: 14px 16px 16px; }
-        .head { display: flex; align-items: baseline; width: 100%; gap: 8px; }
-        .state { font-size: 16px; font-weight: 500; color: var(--primary-text-color); }
-        .warn { color: var(--warning-color, #e08a00); }
+        ha-card { position: relative; height: 100%; box-sizing: border-box; }
+        .title { height: ${TITLE_HEIGHT}px; box-sizing: border-box; margin: 0;
+                 padding: 0 30px; display: flex; align-items: center;
+                 justify-content: center; font-size: 16px; font-weight: 400;
+                 color: var(--primary-text-color);
+                 overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        ha-icon-button.more-info { position: absolute; top: 0; right: 4px;
+                                   color: var(--secondary-text-color); }
+        .wrap { box-sizing: border-box; display: flex; flex-direction: column;
+                align-items: center; gap: 10px; padding: 0 16px 16px; }
         .dial { position: relative; width: 100%; max-width: 100%; }
         ha-control-circular-slider { width: 100% !important; display: block; }
-        .center { position: absolute; inset: 0; display: flex; flex-direction: column;
-                  align-items: center; justify-content: center; gap: 6px;
-                  padding-bottom: 15%; pointer-events: none; }
-        .big { font-size: 40px; font-weight: 300; line-height: 1;
+        .info { position: absolute; inset: 0; display: flex; flex-direction: column;
+                align-items: center; justify-content: center; gap: 6px;
+                padding-bottom: ${INFO_LIFT}%; pointer-events: none; }
+        .label { margin: 0; font-size: 16px; font-weight: 500;
+                 color: var(--primary-text-color); }
+        .label.secondary { display: flex; align-items: center; gap: 4px; }
+        .label.secondary ha-icon { --mdc-icon-size: 16px; }
+        .big { font-size: 44px; font-weight: 400; line-height: 1.12;
                font-variant-numeric: tabular-nums; color: var(--primary-text-color); }
-        .big small { font-size: 19px; font-weight: 400; margin-left: 2px;
-                     vertical-align: 12px; color: var(--primary-text-color); }
-        .cur { display: flex; align-items: center; gap: 5px; font-size: 15px;
-               color: var(--secondary-text-color); font-variant-numeric: tabular-nums; }
-        .cur ha-icon { --mdc-icon-size: 17px; }
-        .cap { font-size: 12px; color: var(--secondary-text-color); }
-        .dot { position: absolute; width: 9px; height: 9px; border-radius: 50%;
-               background: var(--secondary-text-color); transform: translate(-50%, -50%);
-               pointer-events: none; }
+        .big .decimal { font-size: 0.42em; }
+        .big .unit { font-size: 0.33em; }
+        .sr { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
+              overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+        .warn { color: var(--warning-color, #ffa600); }
         .bar { width: 100%; height: 4px; border-radius: 2px;
                background: var(--divider-color); overflow: hidden; }
-        .bar .fill { height: 100%; border-radius: 2px; background: var(--primary-color);
+        .bar .fill { height: 100%; border-radius: 2px;
                      transition: width .3s ease; }
-        .dur { display: flex; align-items: center; gap: 14px; }
+        .dur { display: flex; align-items: center; gap: 20px; }
         .step { width: 44px; height: 44px; border-radius: 22px;
                 border: 1px solid var(--divider-color);
                 background: var(--card-background-color); color: var(--primary-text-color);
                 font-size: 22px; line-height: 1; cursor: pointer; }
-        .val { min-width: 84px; text-align: center; font-size: 22px; font-weight: 500;
-               font-variant-numeric: tabular-nums; cursor: pointer; }
-        .val-input { width: 84px; min-width: 84px; text-align: center; font-size: 22px;
-                     font-weight: 500; font-variant-numeric: tabular-nums;
+        .val { min-width: 96px; text-align: center; font-size: 28px; font-weight: 400;
+               font-variant-numeric: tabular-nums; cursor: pointer;
+               color: var(--primary-text-color); }
+        .val small { font-size: 0.42em; margin-left: 3px; }
+        .val-input { width: 96px; min-width: 96px; text-align: center; font-size: 28px;
+                     font-weight: 400; font-variant-numeric: tabular-nums;
                      background: transparent; color: var(--primary-text-color);
                      border: none; border-bottom: 2px solid var(--primary-color);
                      outline: none; padding: 0 0 2px; }
@@ -155,17 +162,20 @@ class AnovaCookCard extends HTMLElement {
         [hidden] { display: none !important; }
       </style>
       <ha-card>
+        <p class="title"></p>
+        <ha-icon-button class="more-info" aria-label="More information">
+          <ha-icon icon="mdi:dots-vertical"></ha-icon>
+        </ha-icon-button>
         <div class="wrap">
-          <div class="head">
-            <span class="state"></span>
-          </div>
           <div class="dial">
             <ha-control-circular-slider mode="start"></ha-control-circular-slider>
-            <span class="dot" hidden></span>
-            <div class="center">
-              <div class="big"></div>
-              <div class="cur" hidden></div>
-              <div class="cap" hidden></div>
+            <div class="info">
+              <p class="label state"></p>
+              <div class="big" aria-hidden="true"></div>
+              <p class="label secondary">
+                <ha-icon icon="mdi:thermometer"></ha-icon><span class="cur"></span>
+              </p>
+              <span class="sr"></span>
             </div>
           </div>
           <div class="bar" hidden><div class="fill"></div></div>
@@ -184,10 +194,9 @@ class AnovaCookCard extends HTMLElement {
         </div>
       </ha-card>
     `;
+
     this._slider = this.shadowRoot.querySelector("ha-control-circular-slider");
-    this._slider.addEventListener("value-changed", (ev) =>
-      this._onSliderChanged(ev)
-    );
+    this._slider.addEventListener("value-changed", (ev) => this._onSliderChanged(ev));
     // While a finger is on the dial, a state update must not move it: the cooker
     // answers slowly and the next render would fight the drag.
     const endDrag = () => {
@@ -198,6 +207,16 @@ class AnovaCookCard extends HTMLElement {
     });
     this._slider.addEventListener("pointerup", endDrag);
     this._slider.addEventListener("pointercancel", endDrag);
+
+    // Home Assistant's own overflow menu: open the more-info dialog.
+    this.shadowRoot.querySelector(".more-info").onclick = () =>
+      this.dispatchEvent(
+        new CustomEvent("hass-more-info", {
+          detail: { entityId: this._id("climate") },
+          bubbles: true,
+          composed: true,
+        })
+      );
 
     // The duration: tap the number to type one, or hold -/+ for the same field.
     const value = this.shadowRoot.querySelector(".val");
@@ -335,6 +354,21 @@ class AnovaCookCard extends HTMLElement {
     this._render();
   }
 
+  /** A number the way Home Assistant shows it: no trailing zero. */
+  _short(value) {
+    return String(Number(value.toFixed(1)));
+  }
+
+  /** The big number, split like Home Assistant's own: digits, decimal, unit. */
+  _bigNumberHtml(value, unit) {
+    const [whole, decimal] = value.toFixed(1).split(".");
+    return (
+      `<span>${whole}</span>` +
+      `<span class="decimal">.${decimal}</span>` +
+      `<span class="unit">${unit}</span>`
+    );
+  }
+
   _render() {
     if (!this._hass) return;
     const root = this.shadowRoot;
@@ -346,6 +380,7 @@ class AnovaCookCard extends HTMLElement {
     const target = Number(climate.temperature);
     const current = Number(climate.current_temperature);
     const hasTarget = Number.isFinite(target);
+    const hasCurrent = Number.isFinite(current);
     const unit = climate.temperature_unit === "°F" ? "°F" : "°C";
     const minTemp = Number.isFinite(Number(climate.min_temp)) ? Number(climate.min_temp) : 5;
     const maxTemp = Number.isFinite(Number(climate.max_temp)) ? Number(climate.max_temp) : 99.9;
@@ -357,10 +392,22 @@ class AnovaCookCard extends HTMLElement {
     const cooking = this._pending === "start" || status === "cooking";
     this._cooking = cooking;
     // The ring is the target temperature whenever we know it: setting it before a
-    // cook is the whole point. Without a climate entity it falls back to the
+    // cook is the whole point. Without a climate entity it falls back to being the
     // duration dial, so a partial entity set still works.
     const ringIsTemperature = hasTarget;
     this._ringIsTemperature = ringIsTemperature;   // the drag route reads this back
+
+    this.shadowRoot.querySelector(".title").textContent =
+      climate.friendly_name || "Anova Cooker";
+
+    // Blue while you are setting up, the heat colour while it works, warning when
+    // something is wrong: the same colours Home Assistant's own card uses.
+    const accent = low
+      ? "var(--warning-color, #ffa600)"
+      : cooking
+        ? "var(--state-climate-heat-color, #ff6f22)"
+        : "var(--primary-color)";
+
     this._suppressSlider = true;
     if (!this._dragging) {                         // never fight a finger on the dial
       if (ringIsTemperature) {
@@ -369,53 +416,21 @@ class AnovaCookCard extends HTMLElement {
         this._slider.max = range.max;
         this._slider.step = 0.1;
         this._slider.value = target;
+        // Let Home Assistant's own dial draw the water temperature as its marker.
+        this._slider.current = hasCurrent ? current : undefined;
       } else {
         this._slider.min = 0;
         this._slider.max = cooking ? Math.max(duration, 1) : Number(this._config?.max) || 240;
         this._slider.step = this._stepSize();
         this._slider.value = cooking ? Math.min(remaining, this._slider.max) : duration;
+        this._slider.current = undefined;
       }
     }
     this._slider.disabled = false; // drag to change the temperature mid-cook too
-    this._slider.style.setProperty(
-      "--control-circular-slider-color",
-      low ? "var(--warning-color, #e08a00)" : "var(--primary-color)"
-    );
+    this._slider.style.setProperty("--control-circular-slider-color", accent);
     this._suppressSlider = false;
 
-    // The centre, like the card it replaces: the target large with a small unit,
-    // and the water temperature underneath with a thermometer.
-    const big = root.querySelector(".big");
-    const cur = root.querySelector(".cur");
-    const cap = root.querySelector(".cap");
-    const hasCurrent = Number.isFinite(current);
-    if (ringIsTemperature) {
-      big.innerHTML = `${target.toFixed(1)}<small>${unit}</small>`;
-      cur.hidden = !hasCurrent;
-      cur.innerHTML = hasCurrent
-        ? '<ha-icon icon="mdi:thermometer"></ha-icon>' +
-          `<span>${current.toFixed(1)} ${unit}</span>`
-        : "";
-      cap.hidden = true;
-    } else {
-      big.innerHTML = `${duration}<small> min</small>`;
-      cur.hidden = true;
-      cap.hidden = false;
-      cap.textContent = "duration";
-    }
-
-    // The water temperature as a marker on the ring, on the knob's own scale.
-    const dot = root.querySelector(".dot");
-    if (ringIsTemperature && hasCurrent) {
-      const marker = this._markerPosition(current, this._slider.min, this._slider.max);
-      dot.style.left = marker.left;
-      dot.style.top = marker.top;
-      dot.hidden = false;
-    } else {
-      dot.hidden = true;
-    }
-
-    // The state in words.
+    // The state in words, in the middle of the ring, like the card it replaces.
     let stateText = "Off";
     if (low) {
       stateText = "Low water";
@@ -423,7 +438,23 @@ class AnovaCookCard extends HTMLElement {
       const reached = hasCurrent && hasTarget && current >= target - 0.5;
       stateText = reached ? "Cooking" : "Heating";
     }
+
+    // The centre, exactly like the card this replaces: the state, the target with
+    // a small decimal and unit, and the water temperature with a thermometer.
+    const big = root.querySelector(".big");
+    const cur = root.querySelector(".cur");
+    const sr = root.querySelector(".sr");
     const stateEl = root.querySelector(".state");
+    if (ringIsTemperature) {
+      big.innerHTML = this._bigNumberHtml(target, unit);
+      cur.textContent = hasCurrent ? `${this._short(current)} ${unit}` : "";
+      sr.textContent = `${stateText} ${this._short(target)} ${unit}`.trim();
+    } else {
+      big.innerHTML = `${duration}<span class="unit">min</span>`;
+      cur.textContent = "";
+      sr.textContent = `${stateText} ${duration} min`.trim();
+    }
+    root.querySelector(".label.secondary").hidden = !hasCurrent || !ringIsTemperature;
     stateEl.textContent = stateText;
     stateEl.classList.toggle("warn", low);
 
@@ -432,36 +463,23 @@ class AnovaCookCard extends HTMLElement {
     const bar = root.querySelector(".bar");
     const val = root.querySelector(".val");
     if (cooking) {
-      val.textContent = duration > 0 ? `${remaining} min` : "no timer";
+      val.innerHTML = duration > 0
+        ? `${this._short(remaining)}<small>min</small>`
+        : "no timer";
       const fraction = duration > 0 ? Math.max(0, Math.min(1, remaining / duration)) : 0;
       root.querySelector(".fill").style.width = `${fraction * 100}%`;
-      root.querySelector(".fill").style.background = low
-        ? "var(--warning-color, #e08a00)"
-        : "var(--primary-color)";
       bar.hidden = duration <= 0;
     } else {
-      val.textContent = `${duration} min`;
+      val.innerHTML = `${duration}<small>min</small>`;
       bar.hidden = true;
     }
+    root.querySelector(".fill").style.background = accent;
     if (this._minus) this._minus.hidden = cooking;
     if (this._plus) this._plus.hidden = cooking;
     root.querySelector(".dur").hidden = false;
 
     root.querySelector(".start").disabled = low || cooking;
     root.querySelector(".stop").disabled = !cooking;
-  }
-
-  _markerPosition(value, min, max) {
-    // Home Assistant's slider draws its arc at radius 145 in a 320 unit box, from
-    // 135 degrees over 270 degrees, so a value's place on the ring is:
-    const span = max - min;
-    const fraction = span > 0 ? Math.max(0, Math.min(1, (value - min) / span)) : 0.5;
-    const angle = ((135 + 270 * fraction) * Math.PI) / 180;
-    const radius = (145 / 320) * 100;             // per cent of the dial's box
-    return {
-      left: `${50 + radius * Math.cos(angle)}%`,
-      top: `${50 + radius * Math.sin(angle)}%`,
-    };
   }
 }
 
@@ -472,6 +490,6 @@ window.customCards.push({
   type: "anova-cook-card",
   name: "Anova Cook Card",
   description:
-    "One card for the Anova Cooker: duration while off, temperature while cooking, with the remaining time always in view.",
+    "Anova Cooker card in Home Assistant's own style, with the remaining time between - and +.",
   preview: false,
 });
