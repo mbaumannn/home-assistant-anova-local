@@ -36,6 +36,10 @@ class StubSlider extends HTMLElement {
   set step(_v) {}
   set disabled(v) { this._disabled = v; }
   get disabled() { return this._disabled; }
+  // Home Assistant's own dial draws the current temperature as a marker when it is
+  // given a `current` value; the stand-in does the same.
+  set current(v) { this._current = Number(v); this._paint(); }
+  get current() { return this._current; }
   style = { setProperty: (name, value) => { if (name.includes("color")) { this._colour = value; this._paint(); } } };
   connectedCallback() { this._paint(); }
   _paint() {
@@ -43,10 +47,20 @@ class StubSlider extends HTMLElement {
     const fraction = span > 0 ? Math.max(0, Math.min(1, (this._value - this._min) / span)) : 0;
     // Home Assistant's own numbers, read from a live slider: radius 145 in a 320
     // unit box, from 135 degrees over 270 degrees.
-    const cx = 160, cy = 160, r = 145, width = 20, sweep = 270, start = 135;
+    const cx = 160, cy = 160, r = 145, width = 24, sweep = 270, start = 135;
     const circumference = 2 * Math.PI * r, arc = circumference * (sweep / 360);
     const angle = ((start + sweep * fraction) * Math.PI) / 180;
     const knobX = cx + r * Math.cos(angle), knobY = cy + r * Math.sin(angle);
+    let marker = "";
+    if (Number.isFinite(this._current) && this._current >= this._min && this._current <= this._max) {
+      const markerFraction = (this._current - this._min) / span;
+      const markerAngle = ((start + sweep * markerFraction) * Math.PI) / 180;
+      const mx = cx + r * Math.cos(markerAngle), my = cy + r * Math.sin(markerAngle);
+      // A dot in the text colour, with a card-coloured dot under it that cuts the arc.
+      marker =
+        `<circle cx="${mx}" cy="${my}" r="6" fill="var(--card-background-color)"/>` +
+        `<circle cx="${mx}" cy="${my}" r="4" fill="var(--primary-text-color)"/>`;
+    }
     this.shadowRoot.innerHTML = `
       <svg viewBox="0 0 320 320" style="width:100%;display:block">
         <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="var(--divider-color)"
@@ -56,6 +70,7 @@ class StubSlider extends HTMLElement {
                 stroke-width="${width}" stroke-linecap="round"
                 stroke-dasharray="${arc * fraction} ${circumference}" transform="rotate(${start} ${cx} ${cy})"/>
         <circle cx="${knobX}" cy="${knobY}" r="14" fill="#fff"/>
+        ${marker}
       </svg>`;
   }
 }
@@ -68,7 +83,7 @@ THEME = """
     --primary-text-color: #ffffff;
     --secondary-text-color: #9e9e9e;
     --card-background-color: #1c1c1e;
-    --divider-color: #3a3a3c;
+    --divider-color: #464646;
     --warning-color: #ffa726;
     --text-primary-color: #ffffff;
   }

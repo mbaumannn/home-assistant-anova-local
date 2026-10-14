@@ -1,7 +1,7 @@
 {
   "domain": "anova_local",
   "name": "Anova Cooker",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "config_flow": true,
   "documentation": "https://github.com/mbaumannn/home-assistant-anova-local",
   "issue_tracker": "https://github.com/mbaumannn/home-assistant-anova-local/issues",
