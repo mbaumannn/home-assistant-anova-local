@@ -20,7 +20,7 @@ from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers.typing import ConfigType
 
 from .anova_client import AnovaBLE
-from .const import DOMAIN
+from .const import DOMAIN, VERSION
 from .coordinator import AnovaDataUpdateCoordinator
 from .util import format_ble_address
 
@@ -49,7 +49,8 @@ async def _async_register_card(hass: HomeAssistant) -> None:
     )
     hass.data[_CARD_FLAG] = True
     if "frontend" in hass.config.components:
-        add_extra_js_url(hass, _CARD_URL)
+        # Version query busts the browser cache when the card is updated.
+        add_extra_js_url(hass, f"{_CARD_URL}?v={VERSION}")
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
