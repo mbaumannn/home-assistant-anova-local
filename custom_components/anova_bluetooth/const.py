@@ -8,7 +8,7 @@ LOGGER: Logger = getLogger(__package__)
 
 DOMAIN = "anova_bluetooth"
 NAME = "Anova Bluetooth"
-VERSION = "0.2.0"
+VERSION = "0.2.1"
 MANUFACTURER = "Anova Applied Electronics, Inc"
 
 # BLE
