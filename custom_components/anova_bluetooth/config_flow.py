@@ -7,10 +7,10 @@ from homeassistant.components import bluetooth
 from homeassistant.components.bluetooth import BluetoothServiceInfoBleak
 from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
 from homeassistant.const import CONF_ADDRESS
-from homeassistant.helpers.device_registry import format_mac
 
 from .anova_client import AnovaBLE
 from .const import DOMAIN, NAME
+from .util import format_ble_address
 
 
 class AnovaBluetoothConfigFlow(ConfigFlow, domain=DOMAIN):
@@ -25,7 +25,7 @@ class AnovaBluetoothConfigFlow(ConfigFlow, domain=DOMAIN):
     async def async_step_bluetooth(
         self, discovery_info: BluetoothServiceInfoBleak
     ) -> ConfigFlowResult:
-        address = format_mac(discovery_info.address)
+        address = format_ble_address(discovery_info.address)
         await self.async_set_unique_id(address)
         self._abort_if_unique_id_configured()
 
@@ -58,7 +58,7 @@ class AnovaBluetoothConfigFlow(ConfigFlow, domain=DOMAIN):
 
         errors: dict[str, str] = {}
         if user_input is not None:
-            address = format_mac(user_input[CONF_ADDRESS])
+            address = format_ble_address(user_input[CONF_ADDRESS])
             await self.async_set_unique_id(address)
             self._abort_if_unique_id_configured()
             if (reason := await self._async_validate(address)) is not None:

@@ -49,6 +49,8 @@ class AnovaDuration(AnovaEntity, RestoreEntity, NumberEntity):
                 self._preset = int(float(last.state))
             except (TypeError, ValueError):
                 self._preset = 0
+        # Share the restored preset with the rest of the integration.
+        self.coordinator.client.duration_preset = self._preset
 
     @property
     def native_value(self) -> int:
@@ -56,6 +58,7 @@ class AnovaDuration(AnovaEntity, RestoreEntity, NumberEntity):
 
     async def async_set_native_value(self, value: float) -> None:
         self._preset = int(value)
+        self.coordinator.client.duration_preset = self._preset
         self.async_write_ha_state()
         await self.coordinator.client.set_timer(self._preset)
         await self.coordinator.async_request_refresh()

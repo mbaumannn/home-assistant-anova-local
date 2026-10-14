@@ -1,7 +1,10 @@
 """Test command framing and state assembly with a fake BLE transport."""
 from __future__ import annotations
 
+import asyncio
+
 import pytest
+from bleak.exc import BleakError
 
 from anova_bluetooth import anova_client
 from anova_bluetooth.const import AnovaStatus, AnovaUnit
@@ -128,3 +131,176 @@ async def test_timeout_disconnects_and_reconnects(monkeypatch):
     assert anova._client is None
     await anova.set_temp(51.0)               # next command reconnects
     assert len(created) == 2
+
+
+class HangingNotifyClient(FakeClient):
+    """Never returns from start_notify (a hanging subscribe)."""
+
+    async def start_notify(self, _uuid, cb):
+        await asyncio.sleep(3600)
+
+
+class HangingWriteClient(FakeClient):
+    """Never returns from write_gatt_char (a hanging write)."""
+
+    async def write_gatt_char(self, _uuid, data, response=False):
+        await asyncio.sleep(3600)
+
+
+class ErrorWriteClient(FakeClient):
+    """Raises a transport error during a write."""
+
+    async def write_gatt_char(self, _uuid, data, response=False):
+        self.writes.append(bytes(data))
+        raise BleakError("bleak went wrong")
+
+
+class DelayedClient(FakeClient):
+    """Sends the answer after a short delay."""
+
+    async def write_gatt_char(self, _uuid, data, response=False):
+        self.writes.append(bytes(data))
+        cmd = bytes(data).decode().rstrip("\r")
+        reply = self._responses.get(cmd, "ok\r").encode()
+
+        async def _later() -> None:
+            await asyncio.sleep(0.05)
+            if self._cb is not None:
+                await self._cb(None, bytearray(reply))
+
+        asyncio.create_task(_later())
+
+
+async def test_start_notify_is_bounded(monkeypatch):
+    monkeypatch.setattr(anova_client, "NOTIFY_TIMEOUT", 0.05)
+    created: list[FakeClient] = []
+
+    async def fake_establish(*_a, **_k):
+        client = HangingNotifyClient({})
+        created.append(client)
+        return client
+
+    monkeypatch.setattr(anova_client, "establish_connection", fake_establish)
+    anova = anova_client.AnovaBLE(ble_device=object())
+
+    with pytest.raises(anova_client.AnovaCommandError):
+        await anova.set_temp(50.0)
+
+    assert created[0].is_connected is False
+    assert anova._client is None
+
+
+async def test_write_is_bounded(monkeypatch):
+    monkeypatch.setattr(anova_client, "WRITE_TIMEOUT", 0.05)
+    created: list[FakeClient] = []
+
+    async def fake_establish(*_a, **_k):
+        client = HangingWriteClient({})
+        created.append(client)
+        return client
+
+    monkeypatch.setattr(anova_client, "establish_connection", fake_establish)
+    anova = anova_client.AnovaBLE(ble_device=object())
+
+    with pytest.raises(anova_client.AnovaCommandError):
+        await anova.set_temp(50.0)
+
+    assert created[0].is_connected is False
+    assert anova._client is None
+
+
+async def test_cancellation_cleans_up_and_releases_lock(monkeypatch):
+    monkeypatch.setattr(anova_client, "COMMAND_TIMEOUT", 5.0)
+    created: list[FakeClient] = []
+
+    async def fake_establish(*_a, **_k):
+        client = SilentClient({})
+        created.append(client)
+        return client
+
+    monkeypatch.setattr(anova_client, "establish_connection", fake_establish)
+    anova = anova_client.AnovaBLE(ble_device=object())
+
+    task = asyncio.create_task(anova.set_temp(50.0))
+    await asyncio.sleep(0.05)  # let the command reach the reply wait
+    task.cancel()
+
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    assert created[0].is_connected is False
+    assert anova._client is None
+    assert not anova._cmd_lock.locked()
+
+
+async def test_delayed_reply_is_assembled(monkeypatch):
+    monkeypatch.setattr(anova_client, "COMMAND_TIMEOUT", 2.0)
+
+    async def fake_establish(*_a, **_k):
+        return DelayedClient({"version": "ver 6.1.1\r"})
+
+    monkeypatch.setattr(anova_client, "establish_connection", fake_establish)
+    anova = anova_client.AnovaBLE(ble_device=object())
+    assert await anova._command("version") == "ver 6.1.1"
+
+
+async def test_transport_error_disconnects_and_reconnects(monkeypatch):
+    created: list[FakeClient] = []
+
+    async def fake_establish(*_a, **_k):
+        client = (
+            ErrorWriteClient({})
+            if not created
+            else FakeClient({"set temp 51.0": "ok\r"})
+        )
+        created.append(client)
+        return client
+
+    monkeypatch.setattr(anova_client, "establish_connection", fake_establish)
+    anova = anova_client.AnovaBLE(ble_device=object())
+
+    with pytest.raises(BleakError):
+        await anova.set_temp(50.0)
+
+    assert created[0].is_connected is False
+    assert anova._client is None
+    await anova.set_temp(51.0)  # reconnects after the transport error
+    assert len(created) == 2
+
+
+async def test_start_cook_writes_preset_before_start(fake):
+    fake._responses.update(
+        {"set timer 30": "ok\r", "start": "ok\r", "start time": "ok\r"}
+    )
+    anova = anova_client.AnovaBLE(ble_device=object())
+    anova.duration_preset = 30
+
+    await anova.start_cook()
+
+    assert fake.writes == [b"set timer 30\r", b"start\r", b"start time\r"]
+
+
+async def test_start_cook_uses_current_preset_on_each_start(fake):
+    fake._responses.update(
+        {
+            "set timer 30": "ok\r",
+            "set timer 45": "ok\r",
+            "start": "ok\r",
+            "start time": "ok\r",
+        }
+    )
+    anova = anova_client.AnovaBLE(ble_device=object())
+
+    anova.duration_preset = 30
+    await anova.start_cook()
+    anova.duration_preset = 45  # a device timer left at 30 is overwritten
+    await anova.start_cook()
+
+    assert fake.writes == [
+        b"set timer 30\r",
+        b"start\r",
+        b"start time\r",
+        b"set timer 45\r",
+        b"start\r",
+        b"start time\r",
+    ]

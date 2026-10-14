@@ -21,7 +21,7 @@ async def async_setup_entry(
 
 
 class AnovaStartCook(AnovaEntity, ButtonEntity):
-    """Starts heating and the countdown in a single tap."""
+    """Starts a cook with the stored duration: preset, heat and countdown."""
 
     _attr_name = "Start cook"
     _attr_icon = "mdi:play-circle-outline"
@@ -31,6 +31,5 @@ class AnovaStartCook(AnovaEntity, ButtonEntity):
         self._attr_unique_id = f"{coordinator.config_entry.unique_id}_start_cook"
 
     async def async_press(self) -> None:
-        await self.coordinator.client.start()
-        await self.coordinator.client.start_timer()
+        await self.coordinator.client.start_cook()
         await self.coordinator.async_request_refresh()

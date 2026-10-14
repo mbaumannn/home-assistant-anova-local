@@ -27,6 +27,8 @@ from .const import (
     CMD_STOP_TIMER,
     COMMAND_TERMINATOR,
     COMMAND_TIMEOUT,
+    NOTIFY_TIMEOUT,
+    WRITE_TIMEOUT,
     LOGGER,
     DEVICE_NAME,
     AnovaStatus,
@@ -91,6 +93,10 @@ class AnovaBLE:
         self.name = DEVICE_NAME
         self._client: BleakClient | None = None
         self._cmd_lock = asyncio.Lock()
+        # Stored cook duration in minutes, shared with the entities. Start
+        # cook writes this value to the cooker so the device timer matches the
+        # preset shown in Home Assistant.
+        self.duration_preset: int = 0
 
     def set_ble_device(self, device: BLEDevice) -> None:
         """Update the device when it advertises again (auto-connect).
@@ -147,22 +153,34 @@ class AnovaBLE:
 
         payload = (command + COMMAND_TERMINATOR).encode()
         buffer = bytearray()
-        timed_out = False
 
         async with self._cmd_lock:
             client = await self._async_ensure_connected_locked()
-            await client.start_notify(CHAR_UUID, _cb)
             try:
-                await client.write_gatt_char(CHAR_UUID, payload, response=False)
-                try:
-                    async with asyncio.timeout(COMMAND_TIMEOUT):
-                        # Frame on the terminator: an answer may arrive over
-                        # multiple notifications (fragmented).
-                        while COMMAND_TERMINATOR.encode() not in buffer:
-                            buffer.extend(await queue.get())
-                except TimeoutError:
-                    timed_out = True
-            finally:
+                # Bound every step of the transaction, not only the wait for
+                # the answer, so a hanging notify or write cannot hold the lock
+                # forever.
+                async with asyncio.timeout(NOTIFY_TIMEOUT):
+                    await client.start_notify(CHAR_UUID, _cb)
+                async with asyncio.timeout(WRITE_TIMEOUT):
+                    await client.write_gatt_char(CHAR_UUID, payload, response=False)
+                async with asyncio.timeout(COMMAND_TIMEOUT):
+                    # Frame on the terminator: an answer may arrive over
+                    # multiple notifications (fragmented).
+                    while COMMAND_TERMINATOR.encode() not in buffer:
+                        buffer.extend(await queue.get())
+            except TimeoutError as err:
+                # Drop the connection so a late reply cannot land on the next
+                # command.
+                await self._async_disconnect_locked()
+                raise AnovaCommandError(f"timeout on {command!r}") from err
+            except BaseException:
+                # A transport error, a lost connection or a cancellation: drop
+                # the connection so the next command starts clean. The lock is
+                # released by the context manager in all cases.
+                await self._async_disconnect_locked()
+                raise
+            else:
                 # Use the local client reference: the disconnect callback may
                 # already have set ``_client`` to None.
                 if client.is_connected:
@@ -170,12 +188,6 @@ class AnovaBLE:
                         await client.stop_notify(CHAR_UUID)
                     except Exception:  # noqa: BLE001
                         LOGGER.debug("Anova: stop_notify failed", exc_info=True)
-
-            if timed_out:
-                # Drop the connection so a late reply cannot land on the next
-                # command.
-                await self._async_disconnect_locked()
-                raise AnovaCommandError(f"timeout on {command!r}")
 
         reply = buffer.decode(errors="ignore").strip()
         LOGGER.debug("Anova %r -> %r", command, reply)
@@ -209,3 +221,14 @@ class AnovaBLE:
 
     async def stop_timer(self) -> None:
         await self._command(CMD_STOP_TIMER)
+
+    async def start_cook(self) -> None:
+        """Start a cook using the stored duration preset.
+
+        The preset is written to the cooker first so the device timer matches
+        the value shown in Home Assistant, then heating and the countdown are
+        started.
+        """
+        await self.set_timer(self.duration_preset)
+        await self.start()
+        await self.start_timer()
