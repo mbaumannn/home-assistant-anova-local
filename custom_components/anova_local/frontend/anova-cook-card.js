@@ -94,7 +94,12 @@ class AnovaCookCard extends HTMLElement {
     this.shadowRoot.innerHTML = `
       <style>
         :host { display: block; height: 100%; }
-        ha-card { position: relative; height: 100%; padding: 12px 0 16px;
+        /* Masonry renders single cards at full column width; Home Assistant's own
+           thermostat card keeps its dial compact through a resize controller. We
+           cap the card the same way: below the threshold where the control's own
+           steppers appear (240px dial), typography stays at the measured sizes. */
+        ha-card { position: relative; height: 100%; max-width: 276px; margin: 0 auto;
+                  padding: 12px 0 16px;
                   display: flex; flex-direction: column; }
         .title { height: ${TITLE_HEIGHT}px; box-sizing: border-box; margin: 0;
                  padding: 0 30px; display: flex; align-items: center;
