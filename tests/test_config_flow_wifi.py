@@ -10,6 +10,7 @@ from homeassistant.data_entry_flow import FlowResultType
 
 from custom_components.anova_local import config_flow as cf
 from custom_components.anova_local.const import (
+    CONF_CREATE_DASHBOARD,
     CONF_ID_CARD,
     CONF_LISTEN_PORT,
     CONF_PASSWORD,
@@ -107,7 +108,13 @@ async def test_choosing_wifi_leads_to_the_network_step(hass, a_cooker_in_range) 
     assert result["type"] is FlowResultType.FORM
     assert result["step_id"] == "wifi"
     keys = {str(key) for key in result["data_schema"].schema}
-    assert keys == {CONF_SSID, CONF_PASSWORD, CONF_SERVER_HOST, CONF_LISTEN_PORT}
+    assert keys == {
+        CONF_SSID,
+        CONF_PASSWORD,
+        CONF_SERVER_HOST,
+        CONF_LISTEN_PORT,
+        CONF_CREATE_DASHBOARD,
+    }
 
 
 async def test_the_network_step_creates_the_entry_and_forgets_the_password(
