@@ -1,9 +1,16 @@
-"""Read-only GATT round-trip from the Home Assistant side (phase 1 check)."""
+"""Read-only Bluetooth check: connect to a cooker and ask for its version.
+
+Useful to see whether a host can reach the cooker at all, without Home
+Assistant in the way.
+
+Usage:  python3 tools/anova_probe.py AA:BB:CC:DD:EE:FF
+"""
 import asyncio
+import sys
 
 from bleak import BleakClient, BleakScanner
 
-ADDR = "<cooker BLE MAC, redacted>"
+ADDR = sys.argv[1]
 CHAR = "0000ffe1-0000-1000-8000-00805f9b34fb"
 
 
