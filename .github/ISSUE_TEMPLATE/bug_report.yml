@@ -1,0 +1,54 @@
+name: Bug report
+description: Something does not work with the Anova Cooker integration.
+labels: [bug]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, what happened instead.
+    validations:
+      required: true
+  - type: input
+    id: ha-version
+    attributes:
+      label: Home Assistant version
+      placeholder: "2026.10.1"
+    validations:
+      required: true
+  - type: input
+    id: integration-version
+    attributes:
+      label: Integration version
+      description: Settings → Devices & services → Anova Cooker → the version on the card.
+      placeholder: "0.4.0"
+    validations:
+      required: true
+  - type: input
+    id: cooker
+    attributes:
+      label: Cooker model and firmware
+      description: The model sticker, and the firmware version the Anova app shows.
+      placeholder: "Anova Precision Cooker (Bluetooth + Wi-Fi), firmware ver 6.1.1"
+    validations:
+      required: true
+  - type: dropdown
+    id: transport
+    attributes:
+      label: Transport
+      options:
+        - Bluetooth
+        - Local Wi-Fi
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics
+      description: Settings → Devices & services → Anova Cooker → ⋮ → Download diagnostics, then drag the file here. The Wi-Fi password and the cooker key are not in it.
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs around the problem
+      description: The integration never logs the Wi-Fi password, but check what you paste anyway.
+      render: shell
