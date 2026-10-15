@@ -20,6 +20,7 @@
     "http"
   ],
   "documentation": "https://github.com/mbaumannn/home-assistant-anova-local",
+  "integration_type": "device",
   "iot_class": "local_polling",
   "issue_tracker": "https://github.com/mbaumannn/home-assistant-anova-local/issues",
   "requirements": [
