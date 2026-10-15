@@ -62,8 +62,8 @@ class AnovaDataUpdateCoordinator(DataUpdateCoordinator[AnovaState]):
         Only the end of the cooker's own countdown changes the plan: at
         ``event time finish`` the cooker keeps heating like an alarm clock
         instead of stopping, so we stop the heat for it. Every other event is
-        news the cooker reported on its own — a started timer, a stopped one,
-        a temperature someone changed — so the fresh state is pushed to Home
+        news the cooker reported on its own (a started timer, a stopped one,
+        a temperature someone changed), so the fresh state is pushed to Home
         Assistant at once instead of waiting up to two seconds for the poll.
         """
         text = (message or "").strip().lower()

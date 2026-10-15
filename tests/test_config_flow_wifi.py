@@ -76,7 +76,7 @@ from custom_components.anova_local.anova_client import AnovaCommandError  # noqa
 class RealSilenceWifiBle(FakeBle):
     """Firmware truth: `wifi para` is never answered.
 
-    The provisioner must not wait for a reply on it, or onboarding times out —
+    The provisioner must not wait for a reply on it, or onboarding times out;
     found live on firmware 6.1.1 (the fake answered "ok" to everything).
     """
 

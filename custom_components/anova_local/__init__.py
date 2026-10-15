@@ -171,9 +171,9 @@ async def _async_ensure_anova_dashboard(
 ) -> None:
     """Create the Anova dashboard once, after the entry is ready.
 
-    Idempotent and polite: a dashboard that exists at ``anova-cook`` is never
+    Idempotent: a dashboard that exists at ``anova-cook`` is never
     touched (so the user's deletion is honoured), and when Lovelace runs in
-    YAML mode nothing is created either — the view belongs in their yaml file.
+    YAML mode nothing is created either: the view belongs in their yaml file.
     Other dashboards are only read, never modified.
     """
     if not entry.data.get(CONF_CREATE_DASHBOARD, DEFAULT_CREATE_DASHBOARD):
@@ -430,7 +430,7 @@ async def _async_setup_wifi(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if server.connected:
         await coordinator.async_refresh()
     else:
-        # Nothing is wrong with the setup; the cooker simply has not dialled in yet.
+        # Nothing is wrong with the setup; the cooker has not dialled in yet.
         coordinator.async_set_update_error(
             AnovaOfflineError(f"the cooker has not connected to {host}:{port} yet")
         )

@@ -2,8 +2,8 @@
 
 Creation runs at the end of entry setup, driven by the config-flow checkbox.
 What is proven here: the dashboard appears with its one view by default, it does
-not when the box is off, and a dashboard that already exists — or YAML mode —
-puts the setup politely on the skip path instead of touching anything.
+not when the box is off, and a dashboard that already exists (or YAML mode)
+makes the setup skip creation instead of touching anything.
 """
 from __future__ import annotations
 
@@ -208,7 +208,7 @@ async def test_the_flow_creates_the_dashboard_by_default(
 async def test_the_flow_can_leave_the_dashboards_alone(
     hass, hass_storage, a_cooker_in_range, caplog
 ) -> None:
-    """Untick the box and nothing is created — reload later or not at all."""
+    """Untick the box and nothing is created; reload later or not at all."""
     caplog.set_level(logging.DEBUG)
     await setup_lovelace_in_storage_mode(hass)
     with patch.object(cf, "AnovaBLE", FakeBle):
@@ -274,7 +274,7 @@ async def test_an_existing_dashboard_is_left_alone(
     assert item["require_admin"] is True
     assert view_of(hass_storage, item) == their_config  # untouched
     assert len(dashboard_items(hass_storage)) == 1  # never duplicated
-    # The panel is the component's own, for their dashboard — ours never replaced it.
+    # The panel is the component's own, for their dashboard; ours never replaced it.
     assert hass.data[frontend.DATA_PANELS][URL_PATH].sidebar_title == "Anova (self-made)"
     assert "already exists and is left exactly as it is" in caplog.text
 
