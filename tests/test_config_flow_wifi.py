@@ -199,6 +199,68 @@ async def test_choosing_bluetooth_still_creates_a_bluetooth_entry(hass, a_cooker
     assert result["data"][CONF_TRANSPORT] == TRANSPORT_BLUETOOTH
 
 
+def _discovery():
+    """A BluetoothServiceInfoBleak stand-in: the fields the flow reads."""
+    from types import SimpleNamespace
+
+    return SimpleNamespace(address=MAC, name="Anova Cooker", manufacturer="Anova")
+
+
+async def test_discovery_asks_how_to_talk_to_the_cooker(hass, a_cooker_in_range) -> None:
+    """The discovered path must offer the same choice as adding by hand.
+
+    Most users click the discovered integration; without the choice they would
+    get Bluetooth silently, losing the local server they came for.
+    """
+    with patch.object(cf, "AnovaBLE", FakeBle):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": config_entries.SOURCE_BLUETOOTH},
+            data=_discovery(),
+        )
+        assert result["type"] is FlowResultType.FORM
+        assert result["step_id"] == "bluetooth_confirm"
+        keys = {str(key) for key in result["data_schema"].schema}
+        assert keys == {CONF_TRANSPORT, CONF_CREATE_DASHBOARD}
+
+        # Submitting without naming the transport answers with the default:
+        # Wi-Fi, the mode this integration exists for.
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_CREATE_DASHBOARD: True}
+        )
+        assert result["type"] is FlowResultType.FORM
+        assert result["step_id"] == "wifi"        # straight to the network step
+
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            {
+                CONF_SSID: "MyHomeWiFi",
+                CONF_PASSWORD: "correct-horse-42",
+                CONF_SERVER_HOST: "127.0.0.1",
+                CONF_LISTEN_PORT: 8080,
+            },
+        )
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert result["data"][CONF_TRANSPORT] == TRANSPORT_WIFI
+    assert CONF_PASSWORD not in result["data"]
+    assert CONF_SSID not in result["data"]
+
+
+async def test_discovery_can_still_stick_to_bluetooth(hass, a_cooker_in_range) -> None:
+    with patch.object(cf, "AnovaBLE", FakeBle):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": config_entries.SOURCE_BLUETOOTH},
+            data=_discovery(),
+        )
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            {CONF_TRANSPORT: TRANSPORT_BLUETOOTH, CONF_CREATE_DASHBOARD: True},
+        )
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert result["data"][CONF_TRANSPORT] == TRANSPORT_BLUETOOTH
+
+
 async def test_the_default_address_is_ipv4(hass) -> None:
     """The cooker dials an address, and it cannot dial an IPv6 one."""
     flow = cf.AnovaConfigFlow()

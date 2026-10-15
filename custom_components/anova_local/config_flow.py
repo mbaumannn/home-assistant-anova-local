@@ -75,6 +75,10 @@ class AnovaConfigFlow(ConfigFlow, domain=DOMAIN):
     ) -> ConfigFlowResult:
         assert self._address is not None
         if user_input is not None:
+            if user_input[CONF_TRANSPORT] == TRANSPORT_WIFI:
+                # Onboarding to Wi-Fi continues with the SSID form; the cooker
+                # is already in range, so no address is asked again.
+                return await self.async_step_wifi()
             return self.async_create_entry(
                 title=NAME,
                 data={
@@ -92,9 +96,14 @@ class AnovaConfigFlow(ConfigFlow, domain=DOMAIN):
             description_placeholders={"name": NAME},
             data_schema=vol.Schema(
                 {
+                    # Wi-Fi is the mode this integration is built around: it is
+                    # what replaces Anova's cloud, so discovery offers it first.
+                    vol.Required(CONF_TRANSPORT, default=TRANSPORT_WIFI): vol.In(
+                        TRANSPORTS
+                    ),
                     vol.Required(
                         CONF_CREATE_DASHBOARD, default=DEFAULT_CREATE_DASHBOARD
-                    ): bool
+                    ): bool,
                 }
             ),
         )
