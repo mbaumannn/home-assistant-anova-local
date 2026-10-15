@@ -75,3 +75,18 @@ def test_the_command_templates_render_as_the_cooker_expects() -> None:
         CMD_WIFI_PARA.format(ssid="MyHomeWiFi", password="hunter22")
         == "wifi para 2 MyHomeWiFi hunter22 WPA2PSK AES"
     )
+
+
+def test_manifest_declares_one_device_per_config_entry() -> None:
+    assert _manifest()["integration_type"] == "device"
+
+
+def test_hacs_json_matches_the_store_contract() -> None:
+    import json
+    from pathlib import Path
+
+    hacs = json.loads((Path(__file__).parent.parent / "hacs.json").read_text())
+    assert hacs["name"] == "Anova Cooker (local)"
+    assert hacs["homeassistant"] == "2026.5.0"
+    assert hacs["hide_default_branch"] is True
+    assert set(hacs) == {"name", "hide_default_branch", "homeassistant"}
