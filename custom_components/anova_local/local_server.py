@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import hmac
 from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -101,6 +102,7 @@ class AnovaLocalServer:
         on_state: Callable[[AnovaState], None] | None = None,
         on_offline: Callable[[], None] | None = None,
         expected_id_card: str | None = None,
+        expected_key: str | None = None,
         history_size: int = 10,
     ) -> None:
         self.host = host
@@ -110,6 +112,7 @@ class AnovaLocalServer:
         self.on_state = on_state
         self.on_offline = on_offline
         self.expected_id_card = expected_id_card
+        self.expected_key = expected_key
         self.history: deque[dict[str, Any]] = deque(maxlen=history_size)
 
         # Identity, filled in by the handshake.
@@ -379,16 +382,22 @@ class AnovaLocalServer:
         try:
             async with asyncio.timeout(self.timings.handshake):
                 id_card = await self.send("get id card")
-                self.version = await self.send("version")
-                self.key = await self.send("get number")
+                version = await self.send("version")
+                key = await self.send("get number")
             id_card = id_card.removeprefix("anova ").strip()
+            key = key.strip()
             if self.expected_id_card and id_card != self.expected_id_card:
                 raise AnovaRejectedError(
                     f"another cooker dialled in ({id_card}, expected {self.expected_id_card})"
                 )
+            if self.expected_key and not hmac.compare_digest(key, self.expected_key):
+                # Never put the key in the message: the reply is the secret.
+                raise AnovaRejectedError("the dial-in did not present the expected key")
             self.id_card = id_card
+            self.version = version
+            self.key = key
             self.connected_at = datetime.now()
-            LOGGER.info("Anova: cooker connected (%s, firmware %s)", id_card, self.version)
+            LOGGER.info("Anova: cooker connected (%s, firmware %s)", id_card, version)
             self._poll_task = asyncio.create_task(self._poll_loop())
             self._ready.set()
         except asyncio.CancelledError:

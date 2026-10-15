@@ -8,6 +8,7 @@ back to ``unavailable`` when it stops answering.
 from __future__ import annotations
 
 import asyncio
+import logging
 
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -165,3 +166,26 @@ async def test_the_device_says_which_link_is_in_use(hass, enable_custom_integrat
         item for item in dr.async_get(hass).devices.values() if item.identifiers == {(DOMAIN, entry.unique_id)}
     )
     assert device.model == "Precision Cooker (Wi-Fi)"
+
+
+async def test_a_legacy_entry_without_a_key_warns_once_and_still_works(
+    hass, enable_custom_integrations, caplog
+) -> None:
+    """An entry made before key authentication keeps working, on the id card."""
+    entry = wifi_entry()                         # no CONF_KEY: a legacy entry
+    entry.add_to_hass(hass)
+    with caplog.at_level(logging.WARNING):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+    warnings = [
+        record
+        for record in caplog.records
+        if record.levelno == logging.WARNING and "key" in record.getMessage().lower()
+    ]
+    assert len(warnings) == 1                    # one warning per setup, not per dial-in
+
+    server = hass.data[DOMAIN][entry.entry_id].client
+    async with FakeCooker() as cooker:           # the matching id card is enough
+        await cooker.dial(server.server_port)
+        assert await wait_for_state(hass, "sensor.anova_cooker_status", "idle") == "idle"

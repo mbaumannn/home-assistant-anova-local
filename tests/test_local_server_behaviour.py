@@ -187,6 +187,49 @@ async def test_an_unexpected_cooker_is_refused() -> None:
             await server.close()
 
 
+async def test_the_cooker_must_present_the_expected_key() -> None:
+    async with FakeCooker(id_card="f56-a814c163a33", key="75a17b9d64") as cooker:
+        server = await start(
+            FAST, expected_id_card="f56-a814c163a33", expected_key="75a17b9d64"
+        )
+        try:
+            await cooker.dial(server.server_port)
+            await server.wait_for_cooker(timeout=2)
+            assert server.connected
+            assert server.key == "75a17b9d64"
+        finally:
+            await server.close()
+
+
+async def test_a_cooker_with_the_wrong_key_is_rejected() -> None:
+    async with FakeCooker(id_card="f56-a814c163a33", key="0000000000") as cooker:
+        server = await start(
+            FAST, expected_id_card="f56-a814c163a33", expected_key="75a17b9d64"
+        )
+        try:
+            await cooker.dial(server.server_port)
+            for _ in range(100):
+                if not server.connected:
+                    break
+                await asyncio.sleep(0.02)
+            assert not server.connected                  # the key never matched
+            assert server.id_card == "" and server.key == ""   # never trusted
+        finally:
+            await server.close()
+
+
+async def test_a_legacy_entry_without_a_key_is_checked_on_the_id_card() -> None:
+    """An entry made before key authentication keeps working, on the id card."""
+    async with FakeCooker(id_card="f56-a814c163a33", key="anything00") as cooker:
+        server = await start(FAST, expected_id_card="f56-a814c163a33")   # no key
+        try:
+            await cooker.dial(server.server_port)
+            await server.wait_for_cooker(timeout=2)
+            assert server.connected
+        finally:
+            await server.close()
+
+
 async def test_the_server_survives_a_cooker_that_never_speaks() -> None:
     """A silent dial-in must not wedge the listener for the next attempt."""
     async with FakeCooker(mute_after_handshake=False) as quiet, FakeCooker() as good:
