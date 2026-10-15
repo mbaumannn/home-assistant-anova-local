@@ -1,8 +1,5 @@
 # Anova Cooker (local) for Home Assistant
 
-[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=mbaumannn&repository=home-assistant-anova-local&category=integration)
-[![Add the Anova Cooker integration to Home Assistant.](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=anova_local)
-
 Local Home Assistant integration for Anova sous-vide cookers with Bluetooth.
 No Anova app, no cloud, no account.
 
@@ -21,7 +18,19 @@ you.
 
 Requires Home Assistant 2026.5.0 or newer.
 
-## Installation
+## Quick install
+
+1. Open the repository in HACS, confirm **Add**, then select **Download**:
+
+   [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=mbaumannn&repository=home-assistant-anova-local&category=integration)
+
+2. Restart Home Assistant.
+3. Switch the cooker on. Home Assistant discovers it within a minute; select
+   **Configure**. Or start the setup yourself:
+
+   [![Add the Anova Cooker integration to Home Assistant.](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=anova_local)
+
+## Installation without the buttons
 
 ### As a custom repository (available now)
 1. HACS → Integrations → the menu (⋮, top right) → **Custom repositories**.
