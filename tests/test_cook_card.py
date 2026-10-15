@@ -68,6 +68,17 @@ globalThis.HTMLElement = class {
 globalThis.customElements = { define() {} };
 globalThis.window = {};
 globalThis.CustomEvent = class { constructor(type, init) { this.type = type; Object.assign(this, init); } };
+// The countdown ticker: captured instead of scheduled, and a clock that can
+// be moved forward, so "one second later" is drivable from the tests.
+globalThis.__ticks = [];
+globalThis.setInterval = (fn) => { globalThis.__ticks.push(fn); return globalThis.__ticks.length; };
+globalThis.clearInterval = (_handle) => {
+  globalThis.__ticks = globalThis.__ticks.map(() => null);
+};
+let nowMs = 1_790_000_000_000;
+const realNow = Date.now.bind(Date);
+Date.now = () => nowMs;
+globalThis.__advance = (seconds) => { nowMs += seconds * 1000; };
 """
 
 ASSERTIONS = """
@@ -116,6 +127,7 @@ console.log("RESULT " + JSON.stringify({
   stopDisabled: at(".stop").disabled,
   calls: calls,
   immediate: immediate,
+  capturedBetween: globalThis.__captured !== undefined ? globalThis.__captured : null,
 }));
 """
 
@@ -237,6 +249,51 @@ def test_a_cook_without_a_timer_says_so() -> None:
     out = render(states(status="cooking", remaining=0, duration=0))
     assert out["valueHtml"] == "no timer"
     assert out["fillWidth"] == "0%"
+
+
+def test_a_cook_whose_timer_never_ran_says_no_timer() -> None:
+    """The preset exists but the countdown never started: say so, do not show 0 min."""
+    state = states(status="cooking", remaining=0, duration=1)
+    state["switch.anova_cooker_timer"] = {"state": "off", "attributes": {}}
+    out = render(state)
+    assert out["valueHtml"] == "no timer"
+    assert out["fillWidth"] == "0%"
+
+
+def test_the_countdown_holds_whole_minutes_and_then_shows_seconds() -> None:
+    """remaining 26 is "26 min" at once and still "26 min" half a minute later."""
+    state = states(status="cooking", remaining=26, duration=60)
+    state["switch.anova_cooker_timer"] = {"state": "on", "attributes": {}}
+    actions = "__advance(35); globalThis.__ticks.filter(Boolean).forEach((fn) => fn());"
+    out = render(state, actions=actions)
+    assert out["valueHtml"] == "26<small> min</small>"
+
+
+def test_the_last_minute_ticks_in_seconds() -> None:
+    """remaining 1 with the timer on is "1 min" at once, then seconds tick."""
+    state = states(status="cooking", remaining=1, duration=60)
+    state["switch.anova_cooker_timer"] = {"state": "on", "attributes": {}}
+    actions = (
+        # snapshotted at elapsed 0, before the clock moves
+        "globalThis.__captured = at('.val').innerHTML;"
+        "__advance(35);"
+        "globalThis.__ticks.filter(Boolean).forEach((fn) => fn());"
+    )
+    out = render(state, actions=actions)
+    assert out["capturedBetween"] == "1<small> min</small>"
+    assert out["valueHtml"] == "25<small> s</small>"
+
+
+def test_a_stale_poll_re_anchors_instead_of_drifting_below_zero() -> None:
+    """If the state stops moving, the clock re-anchors; the display never lies."""
+    state = states(status="cooking", remaining=1, duration=60)
+    state["switch.anova_cooker_timer"] = {"state": "on", "attributes": {}}
+    # Just over a minute without new numbers from the cooker: the interpolation
+    # would want negative seconds; re-anchoring holds the last full minute.
+    actions = "__advance(70); globalThis.__ticks.filter(Boolean).forEach((fn) => fn());"
+    out = render(state, actions=actions)
+    assert out["valueHtml"] == "1<small> min</small>"
+    assert float(out["fillWidth"].rstrip("%")) > 1
 
 
 def test_tapping_the_duration_opens_a_field_to_type_in() -> None:

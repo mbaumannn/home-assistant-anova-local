@@ -46,6 +46,18 @@ class AnovaCookCard extends HTMLElement {
     this.attachShadow({ mode: "open" });
     this._pending = null; // optimistic: "start" while the cooker reacts
     this._timer = null;
+    // The per-second countdown ticker (started/stopped from _render).
+    this._countTimer = null;
+    // The (remaining, duration) the interpolation is anchored to, and when
+    // those numbers arrived: the wire only reports whole minutes, the
+    // seconds in between are display interpolation, never device truth.
+    this._countKey = null;
+    this._remainingAt = 0;
+  }
+
+  disconnectedCallback() {
+    // A removed card must not keep ticking in the background.
+    this._syncCountdownTimer(false);
   }
 
   setConfig(config) {
@@ -361,9 +373,53 @@ class AnovaCookCard extends HTMLElement {
     this._render();
   }
 
-  /** A number the way Home Assistant shows it: no trailing zero. */
-  _short(value) {
-    return String(Number(value.toFixed(1)));
+  /** Start or stop the per-second countdown ticker. */
+  _syncCountdownTimer(active) {
+    if (active && !this._countTimer) {
+      this._countTimer = setInterval(() => this._tickCountdown(), 1000);
+    } else if (!active && this._countTimer) {
+      clearInterval(this._countTimer);
+      this._countTimer = null;
+    }
+  }
+
+  /**
+   * Paint the countdown between - and +, interpolating the seconds the wire
+   * does not carry. Remember when the cooker's numbers arrived and let the
+   * clock run between polls: 26 whole minutes from the device become a
+   * ticking countdown on screen. Display only — the cooker stops itself from
+   * its own finish event; nothing here ever commands or measures the cook.
+   */
+  _tickCountdown(remaining, duration) {
+    if (remaining === undefined) {
+      // The per-second tick: read the cooker's numbers afresh.
+      remaining = Number(this._state(this._id("remaining"))) || 0;
+      duration = Number(this._state(this._id("duration"))) || 0;
+    }
+    const val = this.shadowRoot.querySelector(".val");
+    const fill = this.shadowRoot.querySelector(".fill");
+    if (!val || !fill) return;
+    const now = Date.now();
+    const key = `${remaining}/${duration}`;
+    if (this._countKey !== key) {
+      // Fresh numbers from the cooker: restart the interpolation here.
+      this._countKey = key;
+      this._remainingAt = now;
+    } else if (now - this._remainingAt > 55000) {
+      // The numbers have not moved for a minute: the poll is stale, re-anchor
+      // so the display cannot drift below the truth.
+      this._remainingAt = now;
+    }
+    const seconds = Math.max(
+      0,
+      Math.min(remaining * 60, remaining * 60 - (now - this._remainingAt) / 1000)
+    );
+    val.innerHTML = seconds >= 60
+      ? `${Math.ceil(seconds / 60)}<small> min</small>`
+      : `${Math.floor(seconds)}<small> s</small>`;
+    // The bar runs on the same interpolated clock.
+    const fraction = Math.max(0, Math.min(1, (seconds / (duration * 60)) || 0));
+    fill.style.width = `${fraction * 100}%`;
   }
 
   _render() {
@@ -425,13 +481,17 @@ class AnovaCookCard extends HTMLElement {
     const fill = root.querySelector(".fill");
     const val = root.querySelector(".val");
     if (cooking) {
-      val.innerHTML = hasTimer && duration > 0
-        ? `${this._short(remaining)}<small> min</small>`
-        : "no timer";
-      const fraction = hasTimer && duration > 0 ? Math.max(0, Math.min(1, remaining / duration)) : 0;
-      fill.style.width = `${fraction * 100}%`;
+      if (hasTimer && duration > 0) {
+        this._tickCountdown(remaining, duration);    // paint once, right now
+        this._syncCountdownTimer(true);              // then once per second
+      } else {
+        val.innerHTML = "no timer";
+        fill.style.width = "0%";
+        this._syncCountdownTimer(false);
+      }
       bar.style.background = "var(--divider-color)";
     } else {
+      this._syncCountdownTimer(false);
       val.innerHTML = unreachable ? "—" : `${duration}<small> min</small>`;
       fill.style.width = "0%";
       bar.style.background = "transparent";          // holds the space, not the eye
