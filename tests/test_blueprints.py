@@ -13,7 +13,7 @@ import yaml
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.template import Template
 
-BLUEPRINT_DIR = Path(__file__).parent.parent / "blueprints" / "automation" / "anova_ble"
+BLUEPRINT_DIR = Path(__file__).parent.parent / "blueprints" / "automation" / "anova_local"
 
 
 class _Loader(yaml.SafeLoader):

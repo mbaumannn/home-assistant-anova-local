@@ -21,8 +21,8 @@ from pytest_homeassistant_custom_component.common import (
 
 from custom_components.anova_local.const import DOMAIN
 
-ADDRESS_UPPER = "<cooker BLE MAC, redacted>"
-ADDRESS_LOWER = "<cooker BLE MAC, redacted>"
+ADDRESS_UPPER = "AA:BB:CC:DD:EE:01"
+ADDRESS_LOWER = "aa:bb:cc:dd:ee:01"
 
 
 @pytest.fixture(autouse=True)
