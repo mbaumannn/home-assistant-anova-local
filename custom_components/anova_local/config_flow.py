@@ -70,11 +70,15 @@ def _async_seen_cookers(hass) -> list[tuple[str, str]]:
     """
     cookers: dict[str, str] = {}
     for info in bluetooth.async_discovered_service_info(hass, connectable=True):
-        if info.local_name != _COOKER_LOCAL_NAME:
+        # The advertised name lives on the advertisement, not on the service
+        # info object itself: habluetooth removed ``local_name`` from
+        # BluetoothServiceInfoBleak (Home Assistant 2026.9+).
+        local_name = info.advertisement.local_name
+        if local_name != _COOKER_LOCAL_NAME:
             continue
         if _COOKER_SERVICE_UUID not in (info.service_uuids or []):
             continue
-        name = info.name or info.local_name or "Anova Cooker"
+        name = info.name or local_name or "Anova Cooker"
         cookers.setdefault(_cook_address(info), f"{name} ({_cook_address(info)})")
     return sorted(cookers.items())
 
