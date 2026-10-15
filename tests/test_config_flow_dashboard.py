@@ -25,6 +25,9 @@ from homeassistant.helpers import collection as ha_collection
 from homeassistant.setup import async_setup_component
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+from homeassistant.components.lovelace import LOVELACE_DATA
+
+from custom_components.anova_local import _running_dashboards_collection as running_collection
 from custom_components.anova_local import config_flow as cf
 from custom_components.anova_local.const import (
     CONF_CREATE_DASHBOARD,
@@ -147,8 +150,7 @@ def expected_view() -> dict:
 
 async def create_the_dashboard_by_hand(hass, hass_storage, config: dict) -> None:
     """A dashboard the user made themselves, before the integration turns up."""
-    coll = DashboardsCollection(hass)
-    await coll.async_load()
+    coll = running_collection(hass)  # the component's own: a fresh one would be overwritten
     item = await coll.async_create_item(
         {
             "url_path": URL_PATH,
@@ -158,7 +160,7 @@ async def create_the_dashboard_by_hand(hass, hass_storage, config: dict) -> None
             "require_admin": True,
         }
     )
-    await LovelaceStorage(hass, item).async_save(config)
+    await hass.data[LOVELACE_DATA].dashboards[URL_PATH].async_save(config)
     await flush_writes(hass)
 
 
@@ -272,7 +274,8 @@ async def test_an_existing_dashboard_is_left_alone(
     assert item["require_admin"] is True
     assert view_of(hass_storage, item) == their_config  # untouched
     assert len(dashboard_items(hass_storage)) == 1  # never duplicated
-    assert not frontend.async_panel_exists(hass, URL_PATH)  # panel never rewritten
+    # The panel is the component's own, for their dashboard — ours never replaced it.
+    assert hass.data[frontend.DATA_PANELS][URL_PATH].sidebar_title == "Anova (self-made)"
     assert "already exists and is left exactly as it is" in caplog.text
 
 
