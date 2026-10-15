@@ -13,8 +13,9 @@
       },
       "bluetooth_confirm": {
         "title": "Set up {name}?",
-        "description": "Home Assistant found {name} over Bluetooth. Nothing is written to the cooker and it stays paired with the Anova app; you can remove this integration at any time.",
+        "description": "Home Assistant found {name} over Bluetooth. Choose how Home Assistant talks to it:\n\n- **Wi-Fi (local server)** puts the cooker on your Wi-Fi so distance stops mattering: Home Assistant takes the place of Anova's cloud, with no account and no Anova app. You need the cooker within a few metres of Home Assistant once, for this setup.\n- **Bluetooth (direct)** works straight away, as long as a Bluetooth adapter or ESPHome Bluetooth proxy stays in range. Nothing is written to the cooker and it stays paired with the Anova app; you can remove this integration at any time.",
         "data": {
+          "transport": "Connection",
           "create_dashboard": "Create the Anova Cooker dashboard (does not touch your other dashboards; you can delete it any time)"
         }
       },
