@@ -24,6 +24,7 @@ from custom_components.anova_local.const import (
 )
 
 MAC = "<cooker BLE MAC, redacted>"
+MAC_FORMATTED = cf.format_ble_address(MAC)   # how HA's registry writes it
 ID_CARD = "f56-a814c163a33"
 
 # Creating the Wi-Fi entry makes Home Assistant set it up, and the local server
@@ -304,30 +305,162 @@ async def test_the_default_address_is_ipv4(hass) -> None:
     assert ":" not in flow._default_host()
 
 
-def _seed_seen_cooker(mac: str) -> None:
-    """Seed the flow's cooker memory with one advertisement, and clear it on exit."""
+def _standing_cooker() -> object:
+    """A BluetoothServiceInfoBleak stand-in: the fields the flow's list reads."""
     from types import SimpleNamespace
 
-    from custom_components.anova_local.config_flow import _SEEN
+    return SimpleNamespace(
+        address=MAC,
+        name="Anova",
+        local_name="Anova",
+        service_uuids=["0000ffe0-0000-1000-8000-00805f9b34fb"],
+    )
 
-    _SEEN.clear()
-    _SEEN[mac.upper()] = SimpleNamespace(address=mac, name="Anova", local_name="Anova")
+
+def _non_cooker() -> object:
+    """A device seen over Bluetooth that is not an Anova cooker."""
+    from types import SimpleNamespace
+
+    return SimpleNamespace(
+        address="<other BLE MAC, redacted>",
+        name="My Speaker",
+        local_name="Speaker",
+        service_uuids=["0000ffd0-0000-1000-8000-00805f9b34fb"],
+    )
+
+
+def _address_validator(result):
+    """The validator behind the address question in a shown form.
+
+    The flow manager flattens vol markers to bare keys, so read the pairs.
+    """
+    for key, validator in result["data_schema"].schema.items():
+        if str(key) == CONF_ADDRESS:
+            return validator
+    raise AssertionError("the form does not ask for an address")
+
+
+def _listed_cookers(result) -> list[str] | None:
+    """The dropdown values of the address question, None when it is free text."""
+    validator = _address_validator(result)
+    if not isinstance(validator, cf.SelectSelector):
+        return None
+    return [option["value"] for option in validator.config["options"]]
+
+
+@pytest.fixture
+def a_seen_cooker():
+    """HA's discovery cache holds one Anova (the manifest matcher's pair)."""
+    with patch.object(
+        cf.bluetooth, "async_discovered_service_info", return_value=[_standing_cooker()]
+    ):
+        yield
 
 
 async def test_the_manual_step_lists_the_cooker_seen_over_bluetooth(
-    hass, a_cooker_in_range
+    hass, a_cooker_in_range, a_seen_cooker
 ) -> None:
     """Nobody knows their cooker's MAC; the picker solves that."""
-    _seed_seen_cooker(MAC)
     with patch.object(cf, "AnovaBLE", FakeBle):
         result = await to_user_form(hass)
         assert result["type"] is FlowResultType.FORM
-        keys = [str(key) for key in result["data_schema"].schema]
-        assert CONF_ADDRESS in keys
+        assert _listed_cookers(result) == [MAC_FORMATTED]
         result = await hass.config_entries.flow.async_configure(
-            result["flow_id"], {CONF_TRANSPORT: TRANSPORT_WIFI, CONF_ADDRESS: MAC.upper()}
+            result["flow_id"], {CONF_TRANSPORT: TRANSPORT_WIFI, CONF_ADDRESS: MAC_FORMATTED}
         )
-        from custom_components.anova_local.config_flow import _SEEN
-        _SEEN.clear()
     assert result["type"] is FlowResultType.FORM
     assert result["step_id"] == "wifi"
+
+
+async def test_a_fresh_install_lists_the_cooker_without_any_entry(
+    hass, a_cooker_in_range, a_seen_cooker
+) -> None:
+    """A fresh install has no config entry, and the cooker still shows up.
+
+    The list must come from what Bluetooth has announced already, not from a
+    tracker that only starts once an entry exists: otherwise the very first
+    user of a fresh install sees an empty picker.
+    """
+    assert not hass.config_entries.async_entries()   # the essence of the bug
+    with patch.object(cf, "AnovaBLE", FakeBle):
+        result = await to_user_form(hass)
+    assert _listed_cookers(result) == [MAC_FORMATTED]
+
+
+async def test_a_configured_cooker_is_not_listed_again(
+    hass, a_cooker_in_range, a_seen_cooker
+) -> None:
+    """A cooker that already has an entry cannot be picked for a second one."""
+    with patch.object(cf, "AnovaBLE", FakeBle):
+        result = await to_user_form(hass)
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            {
+                CONF_TRANSPORT: TRANSPORT_BLUETOOTH,
+                CONF_ADDRESS: MAC_FORMATTED,
+                CONF_CREATE_DASHBOARD: False,
+            },
+        )
+        assert result["type"] is FlowResultType.CREATE_ENTRY
+
+        result = await to_user_form(hass)
+    # The only seen cooker is taken, so the address field falls back to a
+    # question about an address nobody has answered before.
+    assert _listed_cookers(result) is None
+
+
+async def test_with_nothing_discovered_the_user_can_type_the_address(
+    hass, a_cooker_in_range
+) -> None:
+    """The free-text fallback keeps the flow usable when HA has seen nothing."""
+    with patch.object(
+        cf.bluetooth, "async_discovered_service_info", return_value=[_non_cooker()]
+    ):
+        result = await to_user_form(hass)
+    assert result["type"] is FlowResultType.FORM
+    assert _listed_cookers(result) is None   # plain text input: types an address
+
+
+async def test_the_discovery_step_stays_open_for_its_choices(
+    hass, a_cooker_in_range
+) -> None:
+    """The form asks real questions, so it is not a bare confirm dialog.
+
+    ``confirm_only`` would let the UI close the form behind one click, losing
+    the transport choice.
+    """
+    with patch.object(cf, "AnovaBLE", FakeBle):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": config_entries.SOURCE_BLUETOOTH}, data=_discovery()
+        )
+    assert result["type"] is FlowResultType.FORM
+    ours = [
+        flow
+        for flow in hass.config_entries.flow.async_progress()
+        if flow["flow_id"] == result["flow_id"]
+    ]
+    assert ours and not ours[0]["context"].get("confirm_only")
+
+
+def test_the_strings_say_what_is_true() -> None:
+    """Every string name-thing right, in both string files, no em dashes."""
+    import json
+
+    base = "custom_components/anova_local"
+    texts: list[str] = []
+    for path in (f"{base}/strings.json", f"{base}/translations/en.json"):
+        with open(path) as fp:
+            step = json.load(fp)["config"]["step"]
+        user, confirm, wifi = step["user"], step["bluetooth_confirm"], step["wifi"]
+        # The label is true for a dropdown and for a typed address alike.
+        assert user["data"]["address"] == "Cooker"
+        texts += [user["data"]["address"], user["data_description"]["address"]]
+        # Nothing is written and pairing is not claimed: HA holds the one BLE
+        # connection, so the Anova app cannot connect while it runs.
+        assert "stays paired" not in confirm["description"]
+        texts.append(confirm["description"])
+        # After the Wi-Fi step: the cooker should dial in within about a minute.
+        assert "minute" in wifi["description"]
+        texts += [wifi["description"], *wifi["data"].values()]
+    for text in texts:
+        assert "\u2014" not in text, text   # no em dashes in UI strings

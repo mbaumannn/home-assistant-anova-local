@@ -50,56 +50,33 @@ TRANSPORTS = {
     TRANSPORT_WIFI: "Wi-Fi (local server)",
 }
 
-# Every cooker Home Assistant has seen over Bluetooth since it booted, keyed by
-# its address. The manual flow lists these, so nobody has to know their cooker's
-# address: the dropdown fills as the cooker broadcasts itself.
-_SEEN: dict[str, BluetoothServiceInfoBleak] = {}
-_TRACKING = False
+# The two lines the manifest's discovery matcher uses: the config flow's cooker
+# list filters on the same pair, so the dropdown names exactly the cookers that
+# could start a discovery flow on their own.
+_COOKER_LOCAL_NAME = "Anova"
+_COOKER_SERVICE_UUID = "0000ffe0-0000-1000-8000-00805f9b34fb"
 
 
 def _cook_address(info: BluetoothServiceInfoBleak) -> str:
     return format_ble_address(info.address).upper()
 
 
-def _async_on_advert(info: BluetoothServiceInfoBleak) -> None:
-    _SEEN[_cook_address(info)] = info
+def _async_seen_cookers(hass) -> list[tuple[str, str]]:
+    """Cookers in Home Assistant's Bluetooth discovery cache, alphabetically.
 
-
-def async_track_cookers(hass) -> None:
-    """Remember cookers seen over Bluetooth (same matcher as discovery).
-
-    Register at integration setup, so the flow's cooker list is ready before
-    anyone opens it. Returns an unload callback; the config flow keeps it.
+    Read directly when the form opens: the cache is already filled by the
+    Bluetooth integration itself, so a fresh install needs no tracker of our
+    own, and a list built here cannot drift from what HA hears right now.
     """
-    global _TRACKING
-    if _TRACKING:
-        return
-    _TRACKING = True
-    from homeassistant.components.bluetooth import (
-        BluetoothCallbackMatcher,
-        BluetoothScanningMode,
-        async_register_callback,
-    )
-
-    async_register_callback(
-        hass,
-        _async_on_advert,
-        # The same identifying pair the manifest's discovery matcher uses.
-        BluetoothCallbackMatcher(
-            local_name="Anova",
-            service_uuid="0000ffe0-0000-1000-8000-00805f9b34fb",
-        ),
-        BluetoothScanningMode.PASSIVE,
-    )
-
-
-def _seen_cookers() -> list[tuple[str, str]]:
-    """Seen cookers as (address, label) pairs, newest-friendly order."""
-    out = []
-    for address, info in _SEEN.items():
+    cookers: dict[str, str] = {}
+    for info in bluetooth.async_discovered_service_info(hass, connectable=True):
+        if info.local_name != _COOKER_LOCAL_NAME:
+            continue
+        if _COOKER_SERVICE_UUID not in (info.service_uuids or []):
+            continue
         name = info.name or info.local_name or "Anova Cooker"
-        out.append((address, f"{name} ({address})"))
-    return sorted(out, key=lambda item: item[1])
+        cookers.setdefault(_cook_address(info), f"{name} ({_cook_address(info)})")
+    return sorted(cookers.items())
 
 
 class AnovaConfigFlow(ConfigFlow, domain=DOMAIN):
@@ -146,7 +123,6 @@ class AnovaConfigFlow(ConfigFlow, domain=DOMAIN):
                 },
             )
 
-        self._set_confirm_only()
         self.context["title_placeholders"] = {"name": NAME}
         return self.async_show_form(
             step_id="bluetooth_confirm",
@@ -278,7 +254,6 @@ class AnovaConfigFlow(ConfigFlow, domain=DOMAIN):
             LOGGER.warning("Anova onboarding failed with a link error", exc_info=True)
             return {"base": "provision_failed"}
 
-
         self._provisioned = {CONF_ID_CARD: id_card, CONF_KEY: provisioner.key}
         return {}
 
@@ -297,10 +272,15 @@ class AnovaConfigFlow(ConfigFlow, domain=DOMAIN):
     def _cooker_field(self):
         """A dropdown of cookers seen over Bluetooth, or free text as a spare.
 
-        HA tracks what broadcast: the address stays unknown to the user, and the
-        list grows as the cooker cycles through its advertisements.
+        HA tracks what broadcast: the address stays unknown to the user, and
+        cookers that already have an entry are not offered again.
         """
-        seen = _seen_cookers()
+        configured = self._async_current_ids()
+        seen = [
+            (address, label)
+            for address, label in _async_seen_cookers(self.hass)
+            if address not in configured
+        ]
         if seen:
             return SelectSelector(
                 SelectSelectorConfig(
