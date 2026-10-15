@@ -43,6 +43,7 @@ from .const import (
 )
 from .frame import MAX_FRAME, FrameDecoder, FrameError, encode
 from .state import AnovaState
+from .util import redact_command, redact_reply
 
 # One poll pass. `status` also carries the current temperature and the unit on
 # newer firmware ("status running 51.7 c"), which is why the status is read too.
@@ -215,11 +216,15 @@ class AnovaLocalServer:
         and settle, without even looking for a reply.
         """
         if not self.connected:
-            raise AnovaOfflineError(f"the cooker is not connected (cannot send {command!r})")
+            raise AnovaOfflineError(
+                f"the cooker is not connected (cannot send {redact_command(command)!r})"
+            )
         async with self._lock:
             writer = self._writer
             if writer is None:
-                raise AnovaOfflineError(f"the cooker went away (cannot send {command!r})")
+                raise AnovaOfflineError(
+                    f"the cooker went away (cannot send {redact_command(command)!r})"
+                )
             self._drain_replies()
             writer.write(encode(command))
             try:
@@ -227,7 +232,7 @@ class AnovaLocalServer:
             except (TimeoutError, OSError) as err:
                 self._drop_connection()
                 await self._drain_cleanup()
-                raise AnovaOfflineError(f"the write failed for {command!r}") from err
+                raise AnovaOfflineError(f"the write failed for {redact_command(command)!r}") from err
             if expect_reply is False:
                 await asyncio.sleep(self.timings.reply_settle)
                 self._drain_replies()
@@ -243,7 +248,9 @@ class AnovaLocalServer:
                 if expect_reply is None:
                     # Actions are answered with an event (which arrives through
                     # on_event) or with nothing. Silence here is not a failure.
-                    LOGGER.debug("Anova: no reply to %r (an event may follow)", command)
+                    LOGGER.debug(
+                        "Anova: no reply to %r (an event may follow)", redact_command(command)
+                    )
                     self._remember(command, "(no reply, an event may follow)")
                     return ""
                 await self._drain_for(self.timings.drain)
@@ -252,10 +259,10 @@ class AnovaLocalServer:
                 if self.timings.max_misses and self._misses >= self.timings.max_misses:
                     self._drop_connection()
                     await self._drain_cleanup()
-                raise AnovaTimeoutError(f"no reply to {command!r}") from err
+                raise AnovaTimeoutError(f"no reply to {redact_command(command)!r}") from err
             if "invalid command" in reply.lower():
                 self._remember(command, reply)
-                raise AnovaRejectedError(f"the cooker rejected {command!r}")
+                raise AnovaRejectedError(f"the cooker rejected {redact_command(command)!r}")
             self._misses = 0
             self._last[command] = reply
             self._remember(command, reply)
@@ -332,9 +339,18 @@ class AnovaLocalServer:
         await self.start_timer()
 
     def _remember(self, command: str, reply: str) -> None:
-        """Keep the last exchanges, for the diagnostics download."""
+        """Keep the last exchanges, for the diagnostics download.
+
+        The command and its reply are masked before they are stored: the reply
+        to ``get number`` is the cooker's key, and ``set number``/``wifi para``
+        carry the key and the Wi-Fi password.
+        """
         self.history.append(
-            {"command": command, "reply": reply, "at": datetime.now().isoformat(timespec="seconds")}
+            {
+                "command": redact_command(command),
+                "reply": redact_reply(command, reply),
+                "at": datetime.now().isoformat(timespec="seconds"),
+            }
         )
 
     def _drain_replies(self) -> None:
