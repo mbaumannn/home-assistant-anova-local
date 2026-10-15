@@ -79,6 +79,19 @@ CMD_SPEAKER_STATUS = "speaker status"
 WIFI_MIN_PASSWORD = 8
 WIFI_MAX_PASSWORD = 63
 
+# --- dashboard provisioning ----------------------------------------------
+# The finished dashboard is created once, right after the entry is ready —
+# unless it already exists, or the user unticked the box in the config flow.
+# A dashboard that exists at this url path is never touched, renamed or
+# duplicated; a dashboard the user deleted is not recreated.
+CONF_CREATE_DASHBOARD = "create_dashboard"
+DEFAULT_CREATE_DASHBOARD = True
+DASHBOARD_URL_PATH = "anova-cook"
+DASHBOARD_TITLE = "Anova"
+DASHBOARD_ICON = "mdi:pot-steam"
+DASHBOARD_VIEW_TITLE = "Anova Cooker"
+DASHBOARD_VIEW_PATH = "anova"
+
 # --- cooker events --------------------------------------------------------
 # Unsolicited lines the cooker pushes without being asked ("event ble time
 # finish", "user changed ..."). Both transports route these to
