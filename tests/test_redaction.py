@@ -119,14 +119,15 @@ async def test_a_whole_provisioning_never_logs_the_password_or_the_key(
     secrets_are_absent(caplog.records)
 
 
-@pytest.mark.parametrize(
-    "timeout_on",
-    [f"set number {KEY}", f"wifi para 2 {SSID} {PASSWORD} WPA2PSK AES"],
-)
-async def test_a_timed_out_command_reveals_nothing(
-    timeout_on: str, caplog, monkeypatch
-) -> None:
-    install(monkeypatch, FakeBleTransport(replies(), timeout_on=timeout_on))
+async def test_a_timed_out_command_reveals_nothing(caplog, monkeypatch) -> None:
+    """`server para` waits for its echo; if it hangs, the error text stays clean.
+
+    `set number` and `wifi para` can no longer time out at all: the cooker
+    accepts them silently and the provisioner does not wait for a reply
+    (verified on hardware), so nothing that carries the password or the key is
+    ever in a timeout path.
+    """
+    install(monkeypatch, FakeBleTransport(replies(), timeout_on="server para 192.168.2.60 8080"))
     provisioner = AnovaProvisioner(lambda: AnovaBLE(ble_device=object()), key=KEY)
 
     with caplog.at_level(logging.DEBUG):
@@ -135,6 +136,22 @@ async def test_a_timed_out_command_reveals_nothing(
 
     assert PASSWORD not in str(raised.value)
     assert KEY not in str(raised.value)
+    secrets_are_absent(caplog.records)
+
+
+async def test_the_silent_commands_are_sent_without_a_wait(
+    caplog, monkeypatch
+) -> None:
+    """Provisioning succeeds even when the cooker never answers those two lines.
+
+    The full-onboarding red check: nothing logs the secrets anywhere.
+    """
+    install(monkeypatch, FakeBleTransport({"get id card": f"anova {ID_CARD}"}))
+    provisioner = AnovaProvisioner(lambda: AnovaBLE(ble_device=object()), key=KEY)
+
+    with caplog.at_level(logging.DEBUG):
+        await provisioner.provision(SSID, PASSWORD, host="192.168.2.60", port=8080)
+
     secrets_are_absent(caplog.records)
 
 
