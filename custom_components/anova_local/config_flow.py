@@ -12,6 +12,12 @@ from homeassistant.components import bluetooth
 from homeassistant.components.bluetooth import BluetoothServiceInfoBleak
 from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
 from homeassistant.const import CONF_ADDRESS
+from homeassistant.helpers.selector import (
+    SelectOptionDict,
+    SelectSelector,
+    SelectSelectorConfig,
+    SelectSelectorMode,
+)
 
 from .anova_client import AnovaBLE
 from .const import (
@@ -43,6 +49,57 @@ TRANSPORTS = {
     TRANSPORT_BLUETOOTH: "Bluetooth (direct)",
     TRANSPORT_WIFI: "Wi-Fi (local server)",
 }
+
+# Every cooker Home Assistant has seen over Bluetooth since it booted, keyed by
+# its address. The manual flow lists these, so nobody has to know their cooker's
+# address: the dropdown fills as the cooker broadcasts itself.
+_SEEN: dict[str, BluetoothServiceInfoBleak] = {}
+_TRACKING = False
+
+
+def _cook_address(info: BluetoothServiceInfoBleak) -> str:
+    return format_ble_address(info.address).upper()
+
+
+def _async_on_advert(info: BluetoothServiceInfoBleak) -> None:
+    _SEEN[_cook_address(info)] = info
+
+
+def async_track_cookers(hass) -> None:
+    """Remember cookers seen over Bluetooth (same matcher as discovery).
+
+    Register at integration setup, so the flow's cooker list is ready before
+    anyone opens it. Returns an unload callback; the config flow keeps it.
+    """
+    global _TRACKING
+    if _TRACKING:
+        return
+    _TRACKING = True
+    from homeassistant.components.bluetooth import (
+        BluetoothCallbackMatcher,
+        BluetoothScanningMode,
+        async_register_callback,
+    )
+
+    async_register_callback(
+        hass,
+        _async_on_advert,
+        # The same identifying pair the manifest's discovery matcher uses.
+        BluetoothCallbackMatcher(
+            local_name="Anova",
+            service_uuid="0000ffe0-0000-1000-8000-00805f9b34fb",
+        ),
+        BluetoothScanningMode.PASSIVE,
+    )
+
+
+def _seen_cookers() -> list[tuple[str, str]]:
+    """Seen cookers as (address, label) pairs, newest-friendly order."""
+    out = []
+    for address, info in _SEEN.items():
+        name = info.name or info.local_name or "Anova Cooker"
+        out.append((address, f"{name} ({address})"))
+    return sorted(out, key=lambda item: item[1])
 
 
 class AnovaConfigFlow(ConfigFlow, domain=DOMAIN):
@@ -139,7 +196,7 @@ class AnovaConfigFlow(ConfigFlow, domain=DOMAIN):
             data_schema=vol.Schema(
                 {
                     vol.Required(CONF_TRANSPORT, default=TRANSPORT_BLUETOOTH): vol.In(TRANSPORTS),
-                    vol.Required(CONF_ADDRESS): str,
+                    vol.Required(CONF_ADDRESS): self._cooker_field(),
                     vol.Required(
                         CONF_CREATE_DASHBOARD, default=DEFAULT_CREATE_DASHBOARD
                     ): bool,
@@ -235,6 +292,26 @@ class AnovaConfigFlow(ConfigFlow, domain=DOMAIN):
         if local_ip and ":" not in local_ip:      # IPv4 only: the cooker cannot do IPv6
             return local_ip
         return ""
+
+    def _cooker_field(self):
+        """A dropdown of cookers seen over Bluetooth, or free text as a spare.
+
+        HA tracks what broadcast: the address stays unknown to the user, and the
+        list grows as the cooker cycles through its advertisements.
+        """
+        seen = _seen_cookers()
+        if seen:
+            return SelectSelector(
+                SelectSelectorConfig(
+                    options=[
+                        SelectOptionDict(value=addr, label=label) for addr, label in seen
+                    ],
+                    mode=SelectSelectorMode.DROPDOWN,
+                )
+            )
+        # Nothing seen yet: the free-text fallback keeps the flow usable, with
+        # the strings explaining where to find the address.
+        return str
 
     # -- shared ------------------------------------------------------------
     async def _async_validate(self, address: str) -> str | None:

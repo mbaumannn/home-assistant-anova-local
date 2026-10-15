@@ -266,3 +266,32 @@ async def test_the_default_address_is_ipv4(hass) -> None:
     flow = cf.AnovaConfigFlow()
     flow.hass = hass
     assert ":" not in flow._default_host()
+
+
+def _seed_seen_cooker(mac: str) -> None:
+    """Seed the flow's cooker memory with one advertisement, and clear it on exit."""
+    from types import SimpleNamespace
+
+    from custom_components.anova_local.config_flow import _SEEN
+
+    _SEEN.clear()
+    _SEEN[mac.upper()] = SimpleNamespace(address=mac, name="Anova", local_name="Anova")
+
+
+async def test_the_manual_step_lists_the_cooker_seen_over_bluetooth(
+    hass, a_cooker_in_range
+) -> None:
+    """Nobody knows their cooker's MAC; the picker solves that."""
+    _seed_seen_cooker(MAC)
+    with patch.object(cf, "AnovaBLE", FakeBle):
+        result = await to_user_form(hass)
+        assert result["type"] is FlowResultType.FORM
+        keys = [str(key) for key in result["data_schema"].schema]
+        assert CONF_ADDRESS in keys
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_TRANSPORT: TRANSPORT_WIFI, CONF_ADDRESS: MAC.upper()}
+        )
+        from custom_components.anova_local.config_flow import _SEEN
+        _SEEN.clear()
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "wifi"

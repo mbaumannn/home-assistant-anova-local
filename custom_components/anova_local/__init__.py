@@ -22,6 +22,7 @@ from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.typing import ConfigType
 
 from .anova_client import AnovaBLE
+from .config_flow import async_track_cookers
 from .const import (
     CONF_CREATE_DASHBOARD,
     CONF_ID_CARD,
@@ -323,6 +324,9 @@ async def _async_remove_anova_dashboard_if_unchanged(hass: HomeAssistant) -> Non
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Register the bundled Lovelace card so users need no extra frontend cards."""
     await _async_register_card(hass)
+    # The config flow lists cookers from what HA hears over Bluetooth; track from
+    # the start so the list is filled before anyone opens it.
+    async_track_cookers(hass)
     return True
 
 

@@ -7,7 +7,7 @@
         "description": "How should Home Assistant talk to the cooker?\n\n- **Bluetooth (direct)** works straight away, with a Bluetooth adapter or an ESPHome Bluetooth proxy within range.\n- **Wi-Fi (local server)** puts the cooker on your Wi-Fi so distance stops mattering. Home Assistant takes the place of Anova's cloud, so there is no account and no Anova app involved. You need the cooker within a few metres of Home Assistant once, for this setup.",
         "data": {
           "transport": "Connection",
-          "address": "Cooker Bluetooth address",
+          "address": "Your cooker — it was discovered over Bluetooth",
           "create_dashboard": "Create the Anova Cooker dashboard (does not touch your other dashboards; you can delete it any time)"
         }
       },
