@@ -216,6 +216,28 @@ async def _async_ensure_anova_dashboard(
         LOGGER.debug("Anova: the dashboard could not be created", exc_info=True)
 
 
+async def _async_remove_lovelace_resource(hass: HomeAssistant, url: str) -> None:
+    """Delete the card's Lovelace resource (best effort)."""
+    try:
+        from homeassistant.components.lovelace import LOVELACE_DATA
+        from homeassistant.components.lovelace.resources import (
+            ResourceStorageCollection,
+        )
+    except ImportError:  # pragma: no cover
+        return
+    data = hass.data.get(LOVELACE_DATA)
+    resources = getattr(data, "resources", None)
+    if not isinstance(resources, ResourceStorageCollection):
+        return
+    try:
+        await resources.async_load()
+        for item in list(resources.async_items()):
+            if str(item.get("url", "")).startswith(url):
+                await resources.async_delete_item(item["id"])
+    except Exception:  # noqa: BLE001
+        LOGGER.debug("Anova: could not remove the Lovelace resource", exc_info=True)
+
+
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Register the bundled Lovelace card so users need no extra frontend cards."""
     await _async_register_card(hass)
@@ -354,3 +376,19 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 async def _async_reload(hass: HomeAssistant, entry: ConfigEntry) -> None:
     await hass.config_entries.async_reload(entry.entry_id)
+
+
+async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Remove the card's Lovelace resource with the last cooker.
+
+    The card is registered once for the whole integration, so it is removed only
+    when no other entry remains.
+    """
+    remaining = [
+        other
+        for other in hass.config_entries.async_entries(DOMAIN)
+        if other.entry_id != entry.entry_id
+    ]
+    if remaining:
+        return
+    await _async_remove_lovelace_resource(hass, _CARD_URL)
