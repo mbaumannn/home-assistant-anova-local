@@ -388,6 +388,19 @@ class StaleOnceClient(FakeClient):
                 await result
 
 
+async def test_an_unsolicited_event_goes_to_on_event_not_the_queue(fake):
+    """``event ble time finish`` must reach the coordinator, not block a command."""
+    events: list[str] = []
+    anova = anova_client.AnovaBLE(ble_device=object())
+    await anova.connect()
+    anova.on_event = events.append
+    fake._cb(None, b"event ble time finish\r")
+    # A normal command still works: the event never landed in the reply queue.
+    state = await anova.update_state()
+    assert events == ["event ble time finish"]
+    assert state.status is AnovaStatus.STOPPED
+
+
 async def test_read_retries_on_a_stale_reply(monkeypatch):
     # The cooker answers slowly, so the reply to an earlier command can still
     # arrive during a read. The read must validate and retry instead of failing.

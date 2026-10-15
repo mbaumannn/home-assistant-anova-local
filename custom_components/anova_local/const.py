@@ -79,3 +79,30 @@ CMD_SPEAKER_STATUS = "speaker status"
 WIFI_MIN_PASSWORD = 8
 WIFI_MAX_PASSWORD = 63
 
+# --- cooker events --------------------------------------------------------
+# Unsolicited lines the cooker pushes without being asked ("event ble time
+# finish", "user changed ..."). Both transports route these to
+# :meth:`AnovaDataUpdateCoordinator.async_on_cooker_event`.
+EVENT_PREFIXES: tuple[str, ...] = ("event", "user changed")
+
+
+class AnovaStatus(str, Enum):
+    """Raw device status as returned by the cooker."""
+
+    STOPPED = "stopped"
+    RUNNING = "running"
+    LOW_WATER = "low water"
+
+
+class AnovaUnit(str, Enum):
+    CELSIUS = "c"
+    FAHRENHEIT = "f"
+
+
+# Display mapping for sensor.anova_status
+STATUS_LABELS = {
+    AnovaStatus.STOPPED: "idle",
+    AnovaStatus.RUNNING: "cooking",
+    AnovaStatus.LOW_WATER: "low water",
+}
+STATUS_LABEL_OPTIONS = ["idle", "cooking", "low water"]

@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
+from collections.abc import Callable
 
 from bleak_retry_connector import (
     BleakClient,
@@ -29,6 +31,7 @@ from .const import (
     CMD_STOP_TIMER,
     COMMAND_TERMINATOR,
     COMMAND_TIMEOUT,
+    EVENT_PREFIXES,
     NOTIFY_TIMEOUT,
     POST_CONNECT_SETTLE,
     REPLY_SETTLE,
@@ -39,6 +42,34 @@ from .const import (
     AnovaUnit,
 )
 from .state import AnovaState  # noqa: F401  re-exported for the entities and the existing tests
+
+
+class _LineDecoder:
+    """Splits the BLE byte stream into complete lines.
+
+    Over Bluetooth the cooker speaks raw lines terminated with ``\\r`` (the
+    ``0x68`` frame format only exists on the Wi-Fi link). A line can arrive
+    split over several notifications, so the bytes are buffered until the
+    terminator shows up.
+    """
+
+    __slots__ = ("_buffer",)
+
+    def __init__(self) -> None:
+        self._buffer = bytearray()
+
+    def feed(self, data: bytes) -> list[str]:
+        """Add received bytes and return every complete line, in order."""
+        self._buffer.extend(data)
+        lines: list[str] = []
+        while True:
+            index = self._buffer.find(COMMAND_TERMINATOR.encode())
+            if index < 0:
+                break
+            line = bytes(self._buffer[:index])
+            del self._buffer[: index + 1]
+            lines.append(line.decode(errors="ignore").strip())
+        return lines
 
 
 class AnovaError(Exception):
@@ -88,6 +119,10 @@ class AnovaBLE:
         self._cmd_lock = asyncio.Lock()
         self._notify_queue: asyncio.Queue[bytes] | None = None
         self._unit: AnovaUnit | None = None
+        self._decoder = _LineDecoder()
+        # Unsolicited lines (events such as ``event ble time finish``) go here;
+        # never queued as replies.
+        self.on_event: Callable[[str], None] | None = None
         # Stored cook duration in minutes, shared with the entities. Start
         # cook writes this value to the cooker so the device timer matches the
         # preset shown in Home Assistant.
@@ -107,13 +142,19 @@ class AnovaBLE:
         queue = self._notify_queue
         if queue is None:
             return
-        # Bound the queue: notifications we did not ask for must not pile up.
-        while queue.qsize() > 16:
-            try:
-                queue.get_nowait()
-            except asyncio.QueueEmpty:  # pragma: no cover
-                break
-        queue.put_nowait(bytes(data))
+        # Split the notifications into complete lines: unsolicited events go
+        # straight to the consumer, replies are requeued as whole lines so the
+        # command reader can match them.
+        for message in self._decoder.feed(bytes(data)):
+            if message.startswith(EVENT_PREFIXES):
+                LOGGER.debug("Anova BLE: event %s", message)
+                if self.on_event is not None:
+                    self.on_event(message)
+                continue
+            if queue.qsize() > 16:
+                with contextlib.suppress(asyncio.QueueEmpty):  # pragma: no cover
+                    queue.get_nowait()
+            queue.put_nowait((message + COMMAND_TERMINATOR).encode())
 
     def _drain_notifications(self) -> None:
         """Drop stale notifications before writing a new command."""
