@@ -8,7 +8,7 @@ LOGGER: Logger = getLogger(__package__)
 
 DOMAIN = "anova_local"
 NAME = "Anova Cooker"
-VERSION = "0.3.7"
+VERSION = "0.3.9"
 MANUFACTURER = "Anova Applied Electronics, Inc"
 
 # BLE
@@ -79,24 +79,3 @@ CMD_SPEAKER_STATUS = "speaker status"
 WIFI_MIN_PASSWORD = 8
 WIFI_MAX_PASSWORD = 63
 
-
-class AnovaStatus(str, Enum):
-    """Raw device status as returned by the cooker."""
-
-    STOPPED = "stopped"
-    RUNNING = "running"
-    LOW_WATER = "low water"
-
-
-class AnovaUnit(str, Enum):
-    CELSIUS = "c"
-    FAHRENHEIT = "f"
-
-
-# Display mapping for sensor.anova_status
-STATUS_LABELS = {
-    AnovaStatus.STOPPED: "idle",
-    AnovaStatus.RUNNING: "cooking",
-    AnovaStatus.LOW_WATER: "low water",
-}
-STATUS_LABEL_OPTIONS = ["idle", "cooking", "low water"]
