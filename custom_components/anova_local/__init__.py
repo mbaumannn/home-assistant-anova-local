@@ -142,6 +142,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     )
 
     coordinator = AnovaDataUpdateCoordinator(hass, entry, client)
+    # The cooker announces the end of its own countdown ("event ble time
+    # finish"); the coordinator then stops the heat for it.
+    client.on_event = coordinator.async_on_cooker_event
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
 
     # Always close the BLE connection cleanly (unload and failed setup).
@@ -177,6 +180,9 @@ async def _async_setup_wifi(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     )
     coordinator = AnovaDataUpdateCoordinator(hass, entry, server, push=True)
     server.on_state = coordinator.async_set_updated_data
+    # The cooker announces the end of its own countdown ("event ... time
+    # finish"); the coordinator then stops the heat for it.
+    server.on_event = coordinator.async_on_cooker_event
     server.on_offline = lambda: coordinator.async_set_update_error(
         AnovaOfflineError(f"the cooker stopped answering on {host}:{port}")
     )

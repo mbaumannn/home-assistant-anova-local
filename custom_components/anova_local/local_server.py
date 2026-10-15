@@ -36,6 +36,7 @@ from .const import (
     CMD_START_TIMER,
     CMD_STOP,
     CMD_STOP_TIMER,
+    EVENT_PREFIXES,
     LOGGER,
     AnovaStatus,
     AnovaUnit,
@@ -53,9 +54,6 @@ POLL_SET: tuple[str, ...] = (
     "read timer",
     "speaker status",
 )
-
-# The cooker pushes these without being asked.
-EVENT_PREFIXES = ("event", "user changed")
 
 
 class AnovaServerError(Exception):

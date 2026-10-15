@@ -6,6 +6,7 @@ arrives as a callback, so there is no interval to wait for.
 """
 from __future__ import annotations
 
+import asyncio
 from datetime import timedelta
 
 from homeassistant.config_entries import ConfigEntry
@@ -15,7 +16,7 @@ from homeassistant.helpers.update_coordinator import (
     UpdateFailed,
 )
 
-from .const import DOMAIN, LOGGER
+from .const import DOMAIN, LOGGER, AnovaStatus
 from .state import AnovaState
 from .transport import AnovaTransport
 
@@ -53,3 +54,46 @@ class AnovaDataUpdateCoordinator(DataUpdateCoordinator[AnovaState]):
         if state is None:
             raise UpdateFailed("the cooker is not connected")
         return state
+
+    def async_on_cooker_event(self, message: str) -> None:
+        """Take an unsolicited line from the cooker.
+
+        Only the end of the cooker's own countdown matters here: at
+        ``event time finish`` the cooker keeps heating like an alarm clock
+        instead of stopping, so we stop the heat for it. Everything else is
+        ignored for now.
+        """
+        text = (message or "").strip().lower()
+        if not text.endswith("time finish"):
+            return
+        LOGGER.info("The cooker's countdown finished; stopping the heat")
+        # The event arrives from the link's thread; the real stop runs as a
+        # task on Home Assistant so this callback stays snappy.
+        self.hass.async_create_task(
+            self._async_stop_after_timed_cook(),
+            name="anova timed cook stop",
+        )
+
+    async def _async_stop_after_timed_cook(self) -> None:
+        """Stop the heat because the cooker's own countdown ended.
+
+        Stops only while the cooker is still running (a cook that already ended
+        by hand is not touched), then refreshes so the entities show the truth.
+        A transport hiccup is logged, never swallowed silently.
+        """
+        running = self.data is not None and self.data.status is AnovaStatus.RUNNING
+        if running:
+            try:
+                await self.client.stop()
+            except Exception as err:  # noqa: BLE001
+                LOGGER.warning(
+                    "Could not stop the heat after the countdown finished: %s", err
+                )
+            else:
+                LOGGER.info("The heat is off; the timed cook is done")
+        try:
+            await self.async_request_refresh()
+        except Exception as err:  # noqa: BLE001
+            LOGGER.warning(
+                "Could not refresh after the timed cook stopped: %s", err
+            )
