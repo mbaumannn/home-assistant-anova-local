@@ -42,6 +42,7 @@ from .const import (
     AnovaUnit,
 )
 from .state import AnovaState  # noqa: F401  re-exported for the entities and the existing tests
+from .util import redact_command, redact_reply
 
 
 class _LineDecoder:
@@ -274,12 +275,14 @@ class AnovaBLE:
                     except TimeoutError:
                         if expect_reply is True:
                             raise
-                        LOGGER.debug("Anova %r: no reply (optional action)", command)
+                        LOGGER.debug(
+                            "Anova %r: no reply (optional action)", redact_command(command)
+                        )
             except TimeoutError as err:
                 # Drop the connection so a late reply cannot land on the next
                 # command.
                 await self._async_disconnect_locked()
-                raise AnovaCommandError(f"timeout on {command!r}") from err
+                raise AnovaCommandError(f"timeout on {redact_command(command)!r}") from err
             except BaseException:
                 # A transport error, a lost connection or a cancellation: drop
                 # the connection so the next command starts clean. The lock is
@@ -288,7 +291,7 @@ class AnovaBLE:
                 raise
 
         reply = buffer.decode(errors="ignore").strip()
-        LOGGER.debug("Anova %r -> %r", command, reply)
+        LOGGER.debug("Anova %r -> %r", redact_command(command), redact_reply(command, reply))
         return reply
 
     async def raw_command(self, command: str, *, expect_reply: bool | None = True) -> str:
@@ -315,7 +318,9 @@ class AnovaBLE:
             except (TypeError, ValueError, IndexError) as err:
                 last_error = err
                 LOGGER.debug(
-                    "Anova %r: unexpected reply %r, retrying", command, reply
+                    "Anova %r: unexpected reply %r, retrying",
+                    redact_command(command),
+                    redact_reply(command, reply),
                 )
         raise AnovaCommandError(f"invalid reply for {command!r}") from last_error
 
