@@ -105,6 +105,19 @@ class AnovaDataUpdateCoordinator(DataUpdateCoordinator[AnovaState]):
                 "Could not refresh after the timed cook stopped: %s", err
             )
 
+    async def async_quick_refresh(self) -> None:
+        """Read the cooker once and push the fresh state immediately.
+
+        The entities call this right after a command instead of the debounced
+        ``async_request_refresh``: Home Assistant drops a refresh that lands
+        inside the tests-cooldown of the debouncer, which is exactly the lag
+        you feel between Start/Stop and the ring changing.
+        """
+        try:
+            await self._async_push_now()
+        except Exception as err:  # noqa: BLE001
+            LOGGER.warning("Could not refresh after a command: %s", err)
+
     async def _async_push_now(self) -> None:
         """Read the cooker once and push the state to everyone without waiting for a poll.
 

@@ -61,4 +61,4 @@ class AnovaDuration(AnovaEntity, RestoreEntity, NumberEntity):
         self.coordinator.client.duration_preset = self._preset
         self.async_write_ha_state()
         await self.coordinator.client.set_timer(self._preset)
-        await self.coordinator.async_request_refresh()
+        await self.coordinator.async_quick_refresh()
