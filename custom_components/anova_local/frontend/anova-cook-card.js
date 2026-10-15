@@ -113,10 +113,11 @@ class AnovaCookCard extends HTMLElement {
            the control centred inside it and an 8px padding. The negative bottom
            margin cancels the dead space under the 270-degree arc, so the timer
            sits close under the ring at any card width. */
-        .dial { position: relative; flex: none; display: flex;
-                align-items: center; justify-content: center;
-                overflow: hidden; max-width: 100%; box-sizing: border-box;
-                margin-bottom: -10%; }
+        .dial { position: relative; flex: none; width: 100%; max-width: 240px;
+                margin-bottom: -10%;
+                display: flex; align-items: center; justify-content: center;
+                overflow: hidden; box-sizing: border-box;
+                margin-left: auto; margin-right: auto; }
         .dial:before { content: ""; display: block; padding-top: 100%; }
         .dial > * { padding: 8px; }
         ha-state-control-climate-temperature { width: 100%; }
