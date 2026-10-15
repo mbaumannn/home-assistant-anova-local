@@ -15,12 +15,14 @@ from homeassistant.const import CONF_ADDRESS
 
 from .anova_client import AnovaBLE
 from .const import (
+    CONF_CREATE_DASHBOARD,
     CONF_ID_CARD,
     CONF_LISTEN_PORT,
     CONF_PASSWORD,
     CONF_SERVER_HOST,
     CONF_SSID,
     CONF_TRANSPORT,
+    DEFAULT_CREATE_DASHBOARD,
     DEFAULT_LISTEN_PORT,
     DOMAIN,
     LOGGER,
@@ -73,7 +75,13 @@ class AnovaConfigFlow(ConfigFlow, domain=DOMAIN):
         assert self._address is not None
         if user_input is not None:
             return self.async_create_entry(
-                title=NAME, data={CONF_TRANSPORT: TRANSPORT_BLUETOOTH}
+                title=NAME,
+                data={
+                    CONF_TRANSPORT: TRANSPORT_BLUETOOTH,
+                    CONF_CREATE_DASHBOARD: user_input.get(
+                        CONF_CREATE_DASHBOARD, DEFAULT_CREATE_DASHBOARD
+                    ),
+                },
             )
 
         self._set_confirm_only()
@@ -81,6 +89,13 @@ class AnovaConfigFlow(ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="bluetooth_confirm",
             description_placeholders={"name": NAME},
+            data_schema=vol.Schema(
+                {
+                    vol.Required(
+                        CONF_CREATE_DASHBOARD, default=DEFAULT_CREATE_DASHBOARD
+                    ): bool
+                }
+            ),
         )
 
     # -- added by hand -----------------------------------------------------
@@ -100,7 +115,13 @@ class AnovaConfigFlow(ConfigFlow, domain=DOMAIN):
                 return await self.async_step_wifi()
             else:
                 return self.async_create_entry(
-                    title=NAME, data={CONF_TRANSPORT: TRANSPORT_BLUETOOTH}
+                    title=NAME,
+                    data={
+                        CONF_TRANSPORT: TRANSPORT_BLUETOOTH,
+                        CONF_CREATE_DASHBOARD: user_input.get(
+                            CONF_CREATE_DASHBOARD, DEFAULT_CREATE_DASHBOARD
+                        ),
+                    },
                 )
 
         return self.async_show_form(
@@ -109,6 +130,9 @@ class AnovaConfigFlow(ConfigFlow, domain=DOMAIN):
                 {
                     vol.Required(CONF_TRANSPORT, default=TRANSPORT_BLUETOOTH): vol.In(TRANSPORTS),
                     vol.Required(CONF_ADDRESS): str,
+                    vol.Required(
+                        CONF_CREATE_DASHBOARD, default=DEFAULT_CREATE_DASHBOARD
+                    ): bool,
                 }
             ),
             errors=errors,
@@ -128,6 +152,9 @@ class AnovaConfigFlow(ConfigFlow, domain=DOMAIN):
                         CONF_LISTEN_PORT: user_input[CONF_LISTEN_PORT],
                         # The cooker's identity, so the server can check who dialled in.
                         CONF_ID_CARD: self._provisioned.get(CONF_ID_CARD, ""),
+                        CONF_CREATE_DASHBOARD: user_input.get(
+                            CONF_CREATE_DASHBOARD, DEFAULT_CREATE_DASHBOARD
+                        ),
                     },
                 )
 
@@ -139,6 +166,9 @@ class AnovaConfigFlow(ConfigFlow, domain=DOMAIN):
                     vol.Required(CONF_PASSWORD): str,
                     vol.Required(CONF_SERVER_HOST, default=self._default_host()): str,
                     vol.Required(CONF_LISTEN_PORT, default=DEFAULT_LISTEN_PORT): int,
+                    vol.Required(
+                        CONF_CREATE_DASHBOARD, default=DEFAULT_CREATE_DASHBOARD
+                    ): bool,
                 }
             ),
             errors=errors,
