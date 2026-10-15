@@ -44,11 +44,11 @@ body:
   - type: textarea
     id: diagnostics
     attributes:
-      label: Diagnostics
-      description: Settings → Devices & services → Anova Cooker → ⋮ → Download diagnostics, then drag the file here. The Wi-Fi password and the cooker key are not in it.
+      label: Diagnostics (optional)
+      description: If your version offers Download diagnostics (Settings → Devices & services → Anova Cooker → ⋮), drag the file here.
   - type: textarea
     id: logs
     attributes:
-      label: Logs around the problem
-      description: The integration never logs the Wi-Fi password, but check what you paste anyway.
+      label: Debug logs around the problem
+      description: Enable debug logging (Settings → Devices & services → Anova Cooker → ⋮), reproduce the problem and paste the log here. The integration never logs the Wi-Fi password, but check what you paste anyway.
       render: shell
