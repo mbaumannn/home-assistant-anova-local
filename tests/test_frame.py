@@ -60,7 +60,7 @@ def test_decode_accepts_a_long_command() -> None:
 
 def test_decode_is_ascii_only() -> None:
     with pytest.raises(UnicodeEncodeError):
-        encode("cook at 57.5 °C — perfection")
+        encode("cook at 57.5 °C – perfection")
 
 
 def test_decode_rejects_bad_checksum() -> None:

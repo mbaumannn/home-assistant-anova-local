@@ -252,8 +252,8 @@ class AnovaLocalServer:
 
         ``expect_reply=True``: the cooker must answer (the reads and the ``set``
         commands do). ``expect_reply=None``: an action the cooker answers with an
-        *event* or with nothing at all — ``start``, ``stop``, ``start time``,
-        ``stop time``, ``clear alarm`` — so silence is normal, not a failure, and
+        *event* or with nothing at all (``start``, ``stop``, ``start time``,
+        ``stop time``, ``clear alarm``), so silence is normal, not a failure, and
         it must not count towards closing the link. ``expect_reply=False``: write
         and settle, without even looking for a reply.
         """

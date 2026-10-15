@@ -3,7 +3,7 @@
 The card's ring is Home Assistant's own `ha-state-control-climate-temperature`,
 so what we assert here is the contract around it: the live climate state object
 handed to the control, the warning-colour overrides for fault paths, and
-everything that remains ours — the timer between - and +, the progress bar, the
+everything that remains ours: the timer between - and +, the progress bar, the
 Start/Stop gating, and the typed fields. Skipped when node is not available.
 """
 from __future__ import annotations
@@ -297,7 +297,7 @@ def test_a_stale_poll_re_anchors_instead_of_drifting_below_zero() -> None:
 
 
 def test_the_confirming_timer_does_not_restart_the_countdown() -> None:
-    """Start pressed with 1 minute set: the cooker confirms a breath later and
+    """Start pressed with 1 minute set: the cooker confirms shortly after and
     the clock keeps counting from the press instead of counting down twice."""
     confirm = states(status="cooking", remaining=1, duration=1)
     confirm["switch.anova_cooker_timer"] = {"state": "on", "attributes": {}}
@@ -493,7 +493,7 @@ def test_an_unreachable_cooker_says_so_and_refuses_to_act() -> None:
         ),
     )
     assert out["stcStateObj"]["state"] == "unavailable"    # the control says it
-    assert out["valueHtml"] == "—"                         # and no stale timer either
+    assert out["valueHtml"] == "–"                         # and no stale timer either
     assert out["minusVisibility"] == "hidden"
     assert out["bigInputHidden"] is True                   # nothing to type into
     assert out["startDisabled"] is True

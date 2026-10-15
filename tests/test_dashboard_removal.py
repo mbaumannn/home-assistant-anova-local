@@ -1,4 +1,4 @@
-"""The Anova dashboard goes with the last cooker — if the user never changed it.
+"""The Anova dashboard goes with the last cooker, if the user never changed it.
 
 Decision 13 of the HACS plan: the ``anova-cook`` dashboard is deleted with the
 last config entry only when both its sidebar settings and its content are still

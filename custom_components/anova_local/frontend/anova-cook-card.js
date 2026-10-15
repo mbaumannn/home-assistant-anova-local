@@ -1,13 +1,13 @@
 /**
  * Anova Cook Card
  *
- * The ring is Home Assistant's own `ha-state-control-climate-temperature` —
- * literally the element inside `hui-thermostat-card`, given our real climate
+ * The ring is Home Assistant's own `ha-state-control-climate-temperature`,
+ * the very element inside `hui-thermostat-card`, given our real climate
  * state object. It answers drags itself (optimistic value, debounced commit,
  * the dot when off, the orange while it heats), so this file owns only the
- * parts around it: the timer — the remaining minutes sit between - and +,
+ * parts around it: the timer (the remaining minutes sit between - and +,
  * exactly where the duration preset sits before a cook, with a progress bar
- * above them — and Start/Stop.
+ * above them) and Start/Stop.
  *
  *   Off        grey rail with the target dot; -/+ set the duration.
  *   Heating    orange ring from hvac_action, with the water temperature as
@@ -16,7 +16,6 @@
  *
  * Config:
  *   type: custom:anova-cook-card
- *   max: 240                 # duration dial range in minutes (default 240)
  *   step: 5                  # drag/step size in minutes (default 5)
  *   entities:                # optional overrides
  *     start / stop / duration / remaining / status / low_water / climate
@@ -401,7 +400,7 @@ class AnovaCookCard extends HTMLElement {
    * Paint the countdown between - and +, interpolating the seconds the wire
    * does not carry. Remember when the cooker's numbers arrived and let the
    * clock run between polls: 26 whole minutes from the device become a
-   * ticking countdown on screen. Display only — the cooker stops itself from
+   * ticking countdown on screen. Display only: the cooker stops itself from
    * its own finish event; nothing here ever commands or measures the cook.
    *
    * While the card itself has just asked for a start, ``override`` shows the
@@ -511,8 +510,8 @@ class AnovaCookCard extends HTMLElement {
     // The countdown lives between - and +: the preset while the cooker is off, the
     // remaining minutes while the countdown runs (with the buttons out of the way).
     // While the card itself has just asked for a start, the countdown is shown at
-    // once — the preset, anchored at the press — and hands over to the cooker's
-    // own numbers when they arrive a breath later. A cook without a timer says
+    // once (the preset, anchored at the press) and hands over to the cooker's
+    // own numbers when they arrive shortly after. A cook without a timer says
     // so. The bar stays in the layout either way, so the spacing is the same in
     // every state.
     const timerOn = this._state(this._id("timer")) === "on";
@@ -540,15 +539,15 @@ class AnovaCookCard extends HTMLElement {
     } else {
       this._countdownOverride = null;
       this._syncCountdownTimer(false);
-      val.innerHTML = unreachable ? "—" : `${duration}<small> min</small>`;
+      val.innerHTML = unreachable ? "–" : `${duration}<small> min</small>`;
       fill.style.width = "0%";
       bar.style.background = "transparent";          // holds the space, not the eye
     }
     fill.style.background = low
       ? "var(--warning-color, #ffa600)"
       : "var(--state-climate-heat-color, #ff6f22)";
-    // The buttons step aside while cooking but keep their place, so the row — and
-    // with it the spacing between the ring and the timer — is the same in both states.
+    // The buttons step aside while cooking but keep their place, so the row (and
+    // with it the spacing between the ring and the timer) is the same in both states.
     const stepsAway = cooking || unreachable;
     if (this._minus) this._minus.style.visibility = stepsAway ? "hidden" : "";
     if (this._plus) this._plus.style.visibility = stepsAway ? "hidden" : "";

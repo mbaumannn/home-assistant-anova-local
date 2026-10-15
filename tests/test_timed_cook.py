@@ -92,8 +92,8 @@ async def test_finish_event_while_stopped_sends_no_stop(hass) -> None:
 async def test_other_events_push_the_state_at_once(hass) -> None:
     """Any cooker event is news by definition: the state is pushed, not polled.
 
-    Home Assistant scene changes that feel sluggish today — a timer that only
-    switches on a poll or two after ``start time`` — arrive as an event within
+    Home Assistant scene changes that feel sluggish today (a timer that only
+    switches on a poll or two after ``start time``) arrive as an event within
     moments instead.
     """
     client = FakeClient(running_state())
@@ -108,7 +108,7 @@ async def test_other_events_push_the_state_at_once(hass) -> None:
     assert client.stop_calls == 0
 
     # The second event finds the first push still running, so the state is
-    # read only fresh afterwards — but at least once is guaranteed.
+    # read only fresh afterwards, but at least once is guaranteed.
     assert client.updates >= 1
 
 
