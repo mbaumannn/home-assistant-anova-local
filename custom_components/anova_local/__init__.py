@@ -1,6 +1,7 @@
 """Set up the Anova Cooker integration."""
 from __future__ import annotations
 
+import inspect
 from pathlib import Path
 
 from homeassistant.components import bluetooth
@@ -116,6 +117,55 @@ async def _async_ensure_lovelace_resource(hass: HomeAssistant, url: str) -> None
 _DASHBOARD_CARD = {"type": "custom:anova-cook-card"}
 
 
+def _anova_dashboard_sidebar() -> dict:
+    """The sidebar settings of the dashboard, as creation writes them."""
+    return {
+        "title": DASHBOARD_TITLE,
+        "icon": DASHBOARD_ICON,
+        "show_in_sidebar": True,
+        "require_admin": False,
+    }
+
+
+def _anova_dashboard_config() -> dict:
+    """The content of the dashboard: one view with the one cook card.
+
+    Creation writes this and removal compares against it, so the two can
+    never drift apart.
+    """
+    return {
+        "views": [
+            {
+                "title": DASHBOARD_VIEW_TITLE,
+                "path": DASHBOARD_VIEW_PATH,
+                "cards": [dict(_DASHBOARD_CARD)],
+            }
+        ]
+    }
+
+
+def _running_dashboards_collection(hass: HomeAssistant):
+    """The lovelace component's own, running dashboards collection, or None.
+
+    The component keeps it in a local variable. Its websocket command handlers
+    are bound methods of an object that holds it, so unwrapping the registered
+    handler reaches it. Writing through any *other* collection loses data: the
+    running one rewrites the whole storage file the next time the user creates
+    a dashboard. So when it cannot be reached, callers do nothing.
+    """
+    try:
+        from homeassistant.components.lovelace.dashboard import DashboardsCollection
+
+        handler, _schema = hass.data["websocket_api"]["lovelace/dashboards/create"]
+        inner = inspect.unwrap(handler)
+        collection = getattr(
+            getattr(inner, "__self__", None), "storage_collection", None
+        )
+    except Exception:  # noqa: BLE001
+        return None
+    return collection if isinstance(collection, DashboardsCollection) else None
+
+
 async def _async_ensure_anova_dashboard(
     hass: HomeAssistant, entry: ConfigEntry
 ) -> None:
@@ -132,12 +182,8 @@ async def _async_ensure_anova_dashboard(
         )
         return
     try:
-        from homeassistant.components import frontend
         from homeassistant.components.lovelace import LOVELACE_DATA
-        from homeassistant.components.lovelace.dashboard import (
-            DashboardsCollection,
-            LovelaceStorage,
-        )
+        from homeassistant.components.lovelace.dashboard import LovelaceStorage
     except ImportError:  # pragma: no cover
         return
     data = hass.data.get(LOVELACE_DATA)
@@ -165,52 +211,30 @@ async def _async_ensure_anova_dashboard(
             DASHBOARD_URL_PATH,
         )
         return
+    collection = _running_dashboards_collection(hass)
+    if collection is None:
+        LOGGER.info(
+            "Anova: no dashboard was created because Home Assistant's dashboards "
+            "could not be reached safely; add the card custom:anova-cook-card to "
+            "a dashboard by hand"
+        )
+        return
     try:
-        # A fresh collection shares the same storage file; loading it up front
-        # is what keeps every existing dashboard intact when we write ours.
-        collection = DashboardsCollection(hass)
-        await collection.async_load()
         if any(
-            item.get("url_path") == DASHBOARD_URL_PATH for item in collection.data.values()
+            item.get("url_path") == DASHBOARD_URL_PATH
+            for item in collection.data.values()
         ):
             LOGGER.debug(
                 "Anova: a dashboard at %s already exists and is left exactly as it is",
                 DASHBOARD_URL_PATH,
             )
             return
-        item = await collection.async_create_item(
-            {
-                "url_path": DASHBOARD_URL_PATH,
-                "title": DASHBOARD_TITLE,
-                "icon": DASHBOARD_ICON,
-                "show_in_sidebar": True,
-                "require_admin": False,
-            }
+        # The component's own collection: its listener registers the panel and
+        # the dashboards entry, and it knows about the dashboard from now on.
+        await collection.async_create_item(
+            {"url_path": DASHBOARD_URL_PATH, **_anova_dashboard_sidebar()}
         )
-        # The lovelace component picks this storage up on the next start; for
-        # the running instance we register the sidebar panel ourselves.
-        dashboard_config = LovelaceStorage(hass, item)
-        await dashboard_config.async_save(
-            {
-                "views": [
-                    {
-                        "title": DASHBOARD_VIEW_TITLE,
-                        "path": DASHBOARD_VIEW_PATH,
-                        "cards": [dict(_DASHBOARD_CARD)],
-                    }
-                ]
-            }
-        )
-        frontend.async_register_built_in_panel(
-            hass,
-            "lovelace",
-            sidebar_title=DASHBOARD_TITLE,
-            sidebar_icon=DASHBOARD_ICON,
-            frontend_url_path=DASHBOARD_URL_PATH,
-            config={"mode": "storage"},
-            require_admin=False,
-            show_in_sidebar=True,
-        )
+        await dashboards[DASHBOARD_URL_PATH].async_save(_anova_dashboard_config())
         LOGGER.debug("Anova: the dashboard was created at %s", DASHBOARD_URL_PATH)
     except Exception:  # noqa: BLE001  (the entry stays usable without a dashboard)
         LOGGER.debug("Anova: the dashboard could not be created", exc_info=True)
@@ -236,6 +260,64 @@ async def _async_remove_lovelace_resource(hass: HomeAssistant, url: str) -> None
                 await resources.async_delete_item(item["id"])
     except Exception:  # noqa: BLE001
         LOGGER.debug("Anova: could not remove the Lovelace resource", exc_info=True)
+
+
+async def _async_remove_anova_dashboard_if_unchanged(hass: HomeAssistant) -> None:
+    """Delete the Anova dashboard, but only if it is still as we created it.
+
+    Best effort: any exception is logged at DEBUG and never fails the removal.
+    A dashboard the user changed (sidebar settings or content) is kept, with
+    one INFO line. Other dashboards are never touched. Goes through the
+    component's own running collection, whose listener removes the panel and
+    the stored content.
+    """
+    try:
+        from homeassistant.components.lovelace import LOVELACE_DATA
+    except ImportError:  # pragma: no cover
+        return
+    try:
+        data = hass.data.get(LOVELACE_DATA)
+        if data is None:
+            return
+        collection = _running_dashboards_collection(hass)
+        if collection is None:
+            LOGGER.info(
+                "Anova: the dashboard at %s was kept because Home Assistant's "
+                "dashboards could not be reached safely; delete it under "
+                "Settings > Dashboards if you no longer need it",
+                DASHBOARD_URL_PATH,
+            )
+            return
+        item = next(
+            (
+                candidate
+                for candidate in collection.data.values()
+                if candidate.get("url_path") == DASHBOARD_URL_PATH
+            ),
+            None,
+        )
+        if item is None:
+            return
+        dashboard = data.dashboards.get(DASHBOARD_URL_PATH)
+        try:
+            content = await dashboard.async_load(False) if dashboard else None
+        except Exception:  # noqa: BLE001  (no content stored: nothing of the user's to lose)
+            content = None
+        unchanged = (
+            all(item.get(key) == value for key, value in _anova_dashboard_sidebar().items())
+            and content == _anova_dashboard_config()
+        )
+        if not unchanged:
+            LOGGER.info(
+                "Anova: the dashboard at %s was kept because it was changed; "
+                "delete it under Settings > Dashboards if you no longer need it",
+                DASHBOARD_URL_PATH,
+            )
+            return
+        await collection.async_delete_item(item["id"])
+        LOGGER.debug("Anova: the dashboard at %s was removed", DASHBOARD_URL_PATH)
+    except Exception:  # noqa: BLE001
+        LOGGER.debug("Anova: could not remove the dashboard", exc_info=True)
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
@@ -379,7 +461,7 @@ async def _async_reload(hass: HomeAssistant, entry: ConfigEntry) -> None:
 
 
 async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Remove the card's Lovelace resource with the last cooker.
+    """Remove the card's Lovelace resource and the unchanged dashboard with the last cooker.
 
     The card is registered once for the whole integration, so it is removed only
     when no other entry remains.
@@ -392,3 +474,4 @@ async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     if remaining:
         return
     await _async_remove_lovelace_resource(hass, _CARD_URL)
+    await _async_remove_anova_dashboard_if_unchanged(hass)
