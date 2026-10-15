@@ -4,13 +4,17 @@ on:
   pull_request:
   schedule:
     - cron: "0 4 * * *"
+  workflow_dispatch:
+
+permissions: {}
+
 jobs:
   hassfest:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: home-assistant/actions/hassfest@master
-  hacs:
+  validate-hacs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
