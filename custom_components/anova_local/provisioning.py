@@ -83,9 +83,16 @@ class AnovaProvisioner:
         await client.connect()
         try:
             id_card = await client.raw_command(CMD_GET_ID_CARD)
-            await client.raw_command(CMD_SET_NUMBER.format(key=self.key))
-            await client.raw_command(CMD_SERVER_PARA.format(host=host, port=port))
-            await client.raw_command(CMD_WIFI_PARA.format(ssid=ssid, password=password))
+            # `set number` and `wifi para` are accepted by the cooker without a
+            # reply (verified on hardware); only `server para` echoes back. The
+            # silent commands must not be waited on, or the onboarding times out.
+            await client.raw_command(CMD_SET_NUMBER.format(key=self.key), expect_reply=None)
+            await client.raw_command(
+                CMD_SERVER_PARA.format(host=host, port=port), expect_reply=True
+            )
+            await client.raw_command(
+                CMD_WIFI_PARA.format(ssid=ssid, password=password), expect_reply=False
+            )
         finally:
             # The cooker allows one BLE connection at a time: always let it go.
             await client.disconnect()

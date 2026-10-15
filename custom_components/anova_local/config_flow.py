@@ -272,11 +272,12 @@ class AnovaConfigFlow(ConfigFlow, domain=DOMAIN):
                 port=user_input[CONF_LISTEN_PORT],
             )
         except ProvisioningError as err:
-            LOGGER.debug("Anova: onboarding failed: %s", err)
+            LOGGER.warning("Anova onboarding failed: %s", err)
             return {"base": "provision_failed"}
         except Exception:  # noqa: BLE001  (a transport failure is the user's to retry)
-            LOGGER.debug("Anova: onboarding failed unexpectedly", exc_info=True)
+            LOGGER.warning("Anova onboarding failed with a link error", exc_info=True)
             return {"base": "provision_failed"}
+
 
         self._provisioned = {CONF_ID_CARD: id_card, CONF_KEY: provisioner.key}
         return {}
