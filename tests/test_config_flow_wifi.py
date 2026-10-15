@@ -12,6 +12,7 @@ from custom_components.anova_local import config_flow as cf
 from custom_components.anova_local.const import (
     CONF_CREATE_DASHBOARD,
     CONF_ID_CARD,
+    CONF_KEY,
     CONF_LISTEN_PORT,
     CONF_PASSWORD,
     CONF_SERVER_HOST,
@@ -141,6 +142,7 @@ async def test_the_network_step_creates_the_entry_and_forgets_the_password(
     assert data[CONF_SERVER_HOST] == "127.0.0.1"
     assert data[CONF_LISTEN_PORT] == 8080
     assert data[CONF_ID_CARD] == ID_CARD          # so the server can check who dialled in
+    assert len(data[CONF_KEY]) == 10              # the key authenticates the cooker on Wi-Fi
     assert CONF_PASSWORD not in data              # used once, never stored
     assert CONF_SSID not in data
 

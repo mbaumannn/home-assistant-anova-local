@@ -24,6 +24,7 @@ from .anova_client import AnovaBLE
 from .const import (
     CONF_CREATE_DASHBOARD,
     CONF_ID_CARD,
+    CONF_KEY,
     CONF_LISTEN_PORT,
     CONF_SERVER_HOST,
     CONF_TRANSPORT,
@@ -287,10 +288,21 @@ async def _async_setup_wifi(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if not host:
         raise ConfigEntryNotReady("no address for the cooker to dial")
 
+    key = entry.data.get(CONF_KEY)
+    if not key:
+        # The author's own entry predates key authentication. It keeps working on
+        # the (non-secret) id card; a fresh Wi-Fi setup writes a key.
+        LOGGER.warning(
+            "Anova: this Wi-Fi entry has no cooker key (it was created before key "
+            "authentication). The cooker is accepted on its id card only; run the "
+            "Wi-Fi setup again to give it a key."
+        )
+
     server = AnovaLocalServer(
         host,
         port,
         expected_id_card=entry.data.get(CONF_ID_CARD) or None,
+        expected_key=key,
     )
     coordinator = AnovaDataUpdateCoordinator(hass, entry, server, push=True)
     server.on_state = coordinator.async_set_updated_data

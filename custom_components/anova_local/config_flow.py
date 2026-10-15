@@ -17,6 +17,7 @@ from .anova_client import AnovaBLE
 from .const import (
     CONF_CREATE_DASHBOARD,
     CONF_ID_CARD,
+    CONF_KEY,
     CONF_LISTEN_PORT,
     CONF_PASSWORD,
     CONF_SERVER_HOST,
@@ -152,6 +153,8 @@ class AnovaConfigFlow(ConfigFlow, domain=DOMAIN):
                         CONF_LISTEN_PORT: user_input[CONF_LISTEN_PORT],
                         # The cooker's identity, so the server can check who dialled in.
                         CONF_ID_CARD: self._provisioned.get(CONF_ID_CARD, ""),
+                        # The key authenticates the cooker when it dials the server.
+                        CONF_KEY: self._provisioned.get(CONF_KEY, ""),
                         CONF_CREATE_DASHBOARD: user_input.get(
                             CONF_CREATE_DASHBOARD, DEFAULT_CREATE_DASHBOARD
                         ),
@@ -209,7 +212,7 @@ class AnovaConfigFlow(ConfigFlow, domain=DOMAIN):
             LOGGER.debug("Anova: onboarding failed unexpectedly", exc_info=True)
             return {"base": "provision_failed"}
 
-        self._provisioned = {CONF_ID_CARD: id_card, "key": provisioner.key}
+        self._provisioned = {CONF_ID_CARD: id_card, CONF_KEY: provisioner.key}
         return {}
 
     def _default_host(self) -> str:
