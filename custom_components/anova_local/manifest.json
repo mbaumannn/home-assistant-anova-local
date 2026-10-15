@@ -1,7 +1,7 @@
 {
   "domain": "anova_local",
   "name": "Anova Cooker",
-  "version": "0.3.12",
+  "version": "0.3.13",
   "config_flow": true,
   "documentation": "https://github.com/mbaumannn/home-assistant-anova-local",
   "issue_tracker": "https://github.com/mbaumannn/home-assistant-anova-local/issues",
@@ -10,7 +10,8 @@
     "bluetooth_adapters"
   ],
   "after_dependencies": [
-    "frontend"
+    "frontend",
+    "lovelace"
   ],
   "requirements": [
     "bleak-retry-connector>=3.5.0"
