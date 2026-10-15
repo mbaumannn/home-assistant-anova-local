@@ -87,7 +87,7 @@ class AnovaClimate(AnovaEntity, ClimateEntity):
         temp = kwargs.get(ATTR_TEMPERATURE)
         if temp is not None:
             await self.coordinator.client.set_temp(float(temp))
-            await self.coordinator.async_request_refresh()
+            await self.coordinator.async_quick_refresh()
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         if hvac_mode == HVACMode.HEAT:
@@ -97,4 +97,4 @@ class AnovaClimate(AnovaEntity, ClimateEntity):
             await self.coordinator.client.start()
         else:
             await self.coordinator.client.stop()
-        await self.coordinator.async_request_refresh()
+        await self.coordinator.async_quick_refresh()

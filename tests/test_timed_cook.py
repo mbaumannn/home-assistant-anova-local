@@ -112,6 +112,21 @@ async def test_other_events_push_the_state_at_once(hass) -> None:
     assert client.updates >= 1
 
 
+async def test_a_command_refresh_is_never_swallowed_by_the_debouncer(hass) -> None:
+    """Back-to-back commands each show their truth: Home Assistant's debouncer
+    drops a refresh inside its cooldown, which is the lag you felt after
+    Start and Stop.
+    """
+    client = FakeClient(running_state())
+    coordinator = coordinator_for(hass, client)
+    coordinator.data = running_state()
+
+    await coordinator.async_quick_refresh()
+    await coordinator.async_quick_refresh()
+
+    assert client.updates == 2                 # both commands were followed
+
+
 async def test_a_stop_that_fails_is_logged_not_hidden(hass, caplog) -> None:
     """The stop must never fail silently if the cooker is not listening."""
     client = FakeClient(running_state())

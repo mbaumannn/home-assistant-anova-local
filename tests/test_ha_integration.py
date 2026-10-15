@@ -209,8 +209,17 @@ async def test_button_starts_cook_with_stored_preset(hass, monkeypatch):
     await hass.async_block_till_done()
 
     # The stored preset is written before heat and countdown, so a device timer
-    # left at another value is overwritten.
-    assert transport.writes == [b"set timer 42\r", b"start\r", b"start time\r"]
+    # left at another value is overwritten. The quick refresh that follows
+    # reads the cooker back (that is the point of it), so the writes end in
+    # reads.
+    assert transport.writes[:3] == [b"set timer 42\r", b"start\r", b"start time\r"]
+    assert set(transport.writes[3:]) <= {
+        b"status\r",
+        b"read temp\r",
+        b"read set temp\r",
+        b"read timer\r",
+        b"read unit\r",
+    }
 
 
 def _low_water_responses() -> dict[str, str]:

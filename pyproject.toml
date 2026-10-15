@@ -1,6 +1,6 @@
 [project]
 name = "home-assistant-anova-local"
-version = "0.3.11"
+version = "0.3.12"
 description = "Home Assistant integration for Anova sous-vide cookers (Bluetooth, and local Wi-Fi instead of the Anova cloud)"
 requires-python = ">=3.12"
 

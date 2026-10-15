@@ -296,6 +296,26 @@ def test_a_stale_poll_re_anchors_instead_of_drifting_below_zero() -> None:
     assert float(out["fillWidth"].rstrip("%")) > 1
 
 
+def test_the_confirming_timer_does_not_restart_the_countdown() -> None:
+    """Start pressed with 1 minute set: the cooker confirms a breath later and
+    the clock keeps counting from the press instead of counting down twice."""
+    confirm = states(status="cooking", remaining=1, duration=1)
+    confirm["switch.anova_cooker_timer"] = {"state": "on", "attributes": {}}
+    out = render(
+        states(status="idle", duration=1),
+        actions=(
+            'at(".start").onclick();'
+            "__advance(2);"            # two real seconds of cook
+            "globalThis.__ticks.filter(Boolean).forEach((fn) => fn());"
+        ),
+        again=[confirm],
+    )
+    # Two seconds of cook: the optimistic clock ran from the press.
+    assert out["immediate"]["between"] == "58<small> s</small>"
+    # At the hand-over the clock continues at 58, not a fresh minute.
+    assert out["valueHtml"] == "58<small> s</small>"
+
+
 def test_a_just_started_cook_shows_the_countdown_at_once() -> None:
     """Start pressed: the countdown is the preset at once, never "no timer"."""
     out = render(

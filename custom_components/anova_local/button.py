@@ -41,7 +41,7 @@ class AnovaStartCook(AnovaEntity, ButtonEntity):
         # only beep and refuse to heat.
         raise_if_low_water(self.coordinator)
         await self.coordinator.client.start_cook()
-        await self.coordinator.async_request_refresh()
+        await self.coordinator.async_quick_refresh()
 
 
 class AnovaStopCook(AnovaEntity, ButtonEntity):
@@ -57,7 +57,7 @@ class AnovaStopCook(AnovaEntity, ButtonEntity):
     async def async_press(self) -> None:
         await self.coordinator.client.stop()
         await self.coordinator.client.stop_timer()
-        await self.coordinator.async_request_refresh()
+        await self.coordinator.async_quick_refresh()
 
 
 class AnovaSilence(AnovaEntity, ButtonEntity):
@@ -72,4 +72,4 @@ class AnovaSilence(AnovaEntity, ButtonEntity):
 
     async def async_press(self) -> None:
         await self.coordinator.client.silence()
-        await self.coordinator.async_request_refresh()
+        await self.coordinator.async_quick_refresh()

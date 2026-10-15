@@ -36,8 +36,8 @@ class AnovaTimer(AnovaEntity, SwitchEntity):
 
     async def async_turn_on(self, **kwargs) -> None:
         await self.coordinator.client.start_timer()
-        await self.coordinator.async_request_refresh()
+        await self.coordinator.async_quick_refresh()
 
     async def async_turn_off(self, **kwargs) -> None:
         await self.coordinator.client.stop_timer()
-        await self.coordinator.async_request_refresh()
+        await self.coordinator.async_quick_refresh()

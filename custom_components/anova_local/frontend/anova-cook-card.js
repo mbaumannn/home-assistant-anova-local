@@ -46,6 +46,8 @@ class AnovaCookCard extends HTMLElement {
     this.attachShadow({ mode: "open" });
     this._pending = null; // optimistic: "start" while the cooker reacts
     this._timer = null;
+    this._startedAt = null;
+    this._countdownOverride = null;
     // The per-second countdown ticker (started/stopped from _render).
     this._countTimer = null;
     // The (remaining, duration) the interpolation is anchored to, and when
@@ -380,7 +382,9 @@ class AnovaCookCard extends HTMLElement {
   /** Start or stop the per-second countdown ticker. */
   _syncCountdownTimer(active) {
     if (active && !this._countTimer) {
-      this._countTimer = setInterval(() => this._tickCountdown(), 1000);
+      this._countTimer = setInterval(() => {
+        this._tickCountdown(undefined, undefined, this._countdownOverride);
+      }, 1000);
     } else if (!active && this._countTimer) {
       clearInterval(this._countTimer);
       this._countTimer = null;
@@ -420,9 +424,17 @@ class AnovaCookCard extends HTMLElement {
     } else {
       const key = `${remaining}/${duration}`;
       if (this._countKey !== key) {
-        // Fresh numbers from the cooker: restart the interpolation here.
         this._countKey = key;
-        this._remainingAt = now;
+        // Hand-over from the optimistic countdown started at the press: the
+        // cooker's fresh numbers must not restart the clock, or the countdown
+        // visibly counts down twice. While the confirmation is still close to
+        // the press, the clock keeps counting from the press instead.
+        this._remainingAt =
+          this._pending === null &&
+          this._startedAt &&
+          now - this._startedAt < 45000
+            ? this._startedAt
+            : now;
       } else if (now - this._remainingAt > 55000) {
         // The numbers have not moved for a minute: the poll is stale, re-anchor
         // so the display cannot drift below the truth.
@@ -505,20 +517,22 @@ class AnovaCookCard extends HTMLElement {
     const val = root.querySelector(".val");
     if (cooking) {
       if (hasTimer && duration > 0) {
-        // Paint once, right now, then once per second.
-        this._tickCountdown(
-          remaining,
-          duration,
-          optimistic ? { remaining: duration, anchorAt: this._startedAt } : null
-        );
+        // Paint once, right now, then once per second. The override outlives
+        // the render so the per-second tick keeps counting from the anchor
+        // set when the card itself asked for the start.
+        this._countdownOverride =
+          optimistic ? { remaining: duration, anchorAt: this._startedAt } : null;
+        this._tickCountdown(remaining, duration, this._countdownOverride);
         this._syncCountdownTimer(true);
       } else {
+        this._countdownOverride = null;
         val.innerHTML = "no timer";
         fill.style.width = "0%";
         this._syncCountdownTimer(false);
       }
       bar.style.background = "var(--divider-color)";
     } else {
+      this._countdownOverride = null;
       this._syncCountdownTimer(false);
       val.innerHTML = unreachable ? "—" : `${duration}<small> min</small>`;
       fill.style.width = "0%";
