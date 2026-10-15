@@ -5,7 +5,7 @@ from homeassistant.components.climate import (
     ClimateEntity,
     ClimateEntityFeature,
 )
-from homeassistant.components.climate.const import HVACMode
+from homeassistant.components.climate.const import HVACAction, HVACMode
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import ATTR_TEMPERATURE, UnitOfTemperature
 from homeassistant.core import HomeAssistant, callback
@@ -72,6 +72,16 @@ class AnovaClimate(AnovaEntity, ClimateEntity):
         if self.coordinator.data and self.coordinator.data.status is AnovaStatus.RUNNING:
             return HVACMode.HEAT
         return HVACMode.OFF
+
+    @property
+    def hvac_action(self) -> HVACAction | None:
+        """Heating while the cooker runs; Home Assistant's cards colour the ring from this.
+
+        None while off, so the label shows the mode ("Off") instead of "Idle".
+        """
+        if self.coordinator.data and self.coordinator.data.status is AnovaStatus.RUNNING:
+            return HVACAction.HEATING
+        return None
 
     async def async_set_temperature(self, **kwargs) -> None:
         temp = kwargs.get(ATTR_TEMPERATURE)

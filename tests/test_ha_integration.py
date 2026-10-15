@@ -219,6 +219,28 @@ def _low_water_responses() -> dict[str, str]:
     return responses
 
 
+async def test_climate_says_heating_while_the_cooker_runs(hass, monkeypatch):
+    """The ring turns orange from hvac_action, so the entity must publish it."""
+    running = dict(DEFAULT_RESPONSES)
+    running["status"] = "running\r"
+    await _setup(hass, monkeypatch, responses=running)
+    climate_id = _entity_id(hass, "climate")
+
+    climate = hass.states.get(climate_id)
+    assert climate.state == "heat"
+    assert climate.attributes["hvac_action"] == "heating"
+
+
+async def test_climate_says_idle_when_the_cooker_stops(hass, monkeypatch):
+    await _setup(hass, monkeypatch)
+    climate_id = _entity_id(hass, "climate")
+
+    climate = hass.states.get(climate_id)
+    assert climate.state == "off"
+    # No action while off: Home Assistant's cards then label the ring "Off".
+    assert climate.attributes.get("hvac_action") is None
+
+
 async def test_low_water_indicator_turns_on(hass, monkeypatch):
     await _setup(hass, monkeypatch, responses=_low_water_responses())
 

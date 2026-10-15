@@ -1,11 +1,10 @@
 """The bundled card, rendered through node with a stub DOM.
 
-The card is the only part of this integration a user looks at, and it is built to
-match Home Assistant's own thermostat card, so what ends up on screen is asserted
-here: the state inside the ring, the big number with its small decimal and unit,
-the water temperature handed to Home Assistant's dial as its marker (so the dial
-draws the dot itself), the colours per state, and our timer between - and +.
-Skipped when node is not available.
+The card's ring is Home Assistant's own `ha-state-control-climate-temperature`,
+so what we assert here is the contract around it: the live climate state object
+handed to the control, the warning-colour overrides for fault paths, and
+everything that remains ours — the timer between - and +, the progress bar, the
+Start/Stop gating, and the typed fields. Skipped when node is not available.
 """
 from __future__ import annotations
 
@@ -32,7 +31,7 @@ const nodes = new Map();
 function makeElement() {
   const el = {
     textContent: "", innerHTML: "", hidden: false, disabled: false,
-    min: 0, max: 0, step: 0, value: 0, current: null,
+    stateObj: null,
     styleProps: {},
     style: {
       setProperty: (name, value) => { el.styleProps[name] = value; },
@@ -79,7 +78,8 @@ const at = (selector) => {
   return nodes.get(selector);
 };
 const calls = [];
-const slider = at("ha-control-circular-slider");
+const stc = at("ha-state-control-climate-temperature");
+const haCard = at("ha-card");
 const setHass = (states2) => {
   card.hass = {
     states: states2,
@@ -87,38 +87,23 @@ const setHass = (states2) => {
   };
 };
 setHass(__STATES__);
-const drag = __DRAG__;
-if (drag !== null) {
-  slider.listeners["value-changed"]({ detail: { value: drag } });
-}
 __ACTIONS__
 // What is on screen right after the interaction, before any later state update.
 const immediate = {
-  value: slider.value,
-  center: at(".big").innerHTML,
   between: at(".val").innerHTML,
 };
-// Each extra state is a later Home Assistant update: the trail shows what the
-// dial did in response, which is how "does it jump?" is answered.
-const trail = [];
-for (const next of __AGAIN__) {
-  setHass(next);
-  trail.push({ min: slider.min, max: slider.max, value: slider.value });
-}
+__AGAIN__
 console.log("RESULT " + JSON.stringify({
   title: at(".title").textContent,
-  state: at(".state").textContent,
-  warns: at(".state").classes.has("warn"),
-  center: at(".big").innerHTML,
-  cur: at(".cur").textContent,
-  secondaryHidden: at(".label.secondary").hidden,
-  sr: at(".sr").textContent,
-  accent: slider.styleProps["--control-circular-slider-color"],
-  markerCurrent: slider.current === undefined ? null : slider.current,
+  stcPresent: nodes.has("ha-state-control-climate-temperature"),
+  stcHidden: stc.hidden,
+  stcState: stc.stateObj ? stc.stateObj.state : null,
+  stcStateObj: stc.stateObj,
+  offColorVar: haCard.styleProps["--state-climate-off-color"],
+  heatColorVar: haCard.styleProps["--state-climate-heat-color"],
   barBackground: at(".bar").style.background,
   fillWidth: at(".fill").style.width,
   barColor: at(".fill").style.background,
-  bigHidden: at(".big").hidden,
   bigInputHidden: at(".big-input").hidden,
   bigInputValue: at(".big-input").value,
   valueHtml: at(".val").innerHTML,
@@ -129,12 +114,7 @@ console.log("RESULT " + JSON.stringify({
   inputValue: at(".val-input").value,
   startDisabled: at(".start").disabled,
   stopDisabled: at(".stop").disabled,
-  sliderDisabled: slider.disabled,
-  sliderValue: slider.value,
-  sliderMin: slider.min,
-  sliderMax: slider.max,
   calls: calls,
-  trail: trail,
   immediate: immediate,
 }));
 """
@@ -161,6 +141,7 @@ def states(
     target: float = 36.0,
     current: float = 24.5,
     with_climate: bool = True,
+    climate_state: str | None = None,
 ) -> dict:
     out = {
         "sensor.anova_cooker_status": {"state": status, "attributes": {}},
@@ -175,13 +156,14 @@ def states(
         climate = json.loads(json.dumps(CLIMATE))
         climate["attributes"]["temperature"] = target
         climate["attributes"]["current_temperature"] = current
+        if climate_state is not None:
+            climate["state"] = climate_state
         out["climate.anova_cooker"] = climate
     return out
 
 
 def render(
     state: dict,
-    drag: float | None = None,
     actions: str = "",
     again: list[dict] | None = None,
 ) -> dict:
@@ -189,9 +171,11 @@ def render(
         STUBS
         + CARD.read_text()
         + ASSERTIONS.replace("__STATES__", json.dumps(state))
-        .replace("__DRAG__", "null" if drag is None else json.dumps(drag))
         .replace("__ACTIONS__", actions)
-        .replace("__AGAIN__", json.dumps(again or []))
+        .replace(
+            "__AGAIN__",
+            "\n".join(f"setHass({json.dumps(next)});" for next in (again or [])),
+        )
     )
     with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False) as handle:
         handle.write(script)
@@ -207,101 +191,52 @@ def render(
     return json.loads(line.removeprefix("RESULT "))
 
 
-def test_off_is_blue_and_shows_the_target_with_the_water_temperature() -> None:
-    out = render(states(status="idle"))
+def test_the_ring_is_home_assistants_own_control_with_the_climate_state() -> None:
+    state = states(status="idle")
+    out = render(state)
+    assert out["stcPresent"] is True
+    assert out["stcHidden"] is False
+    assert out["stcStateObj"] == state["climate.anova_cooker"]
     assert out["title"] == "Anova Cooker"                  # like the card it replaces
-    assert out["state"] == "Off"                            # inside the ring
-    assert out["center"] == "<span>36</span><span class=\"decimal\">.0</span><span class=\"unit\">°C</span>"
-    assert out["cur"] == "24.5 °C"
-    assert out["secondaryHidden"] is False
-    assert out["accent"] == "var(--primary-color)"          # blue while setting up
-    assert out["markerCurrent"] == 24.5                     # Home Assistant's dial draws the dot
+
+
+def test_off_holds_the_timer_preset_and_refuses_stop() -> None:
+    out = render(states(status="idle"))
     assert out["barBackground"] == "transparent"   # holds the space, not the eye
     assert out["fillWidth"] == "0%"
     assert out["valueHtml"] == "60<small> min</small>"
     assert out["minusVisibility"] == ""
-    assert out["sliderValue"] == 36.0
-    assert (out["sliderMin"], out["sliderMax"]) == (26.0, 46.0)
     assert out["startDisabled"] is False
     assert out["stopDisabled"] is True
+    assert out["heatColorVar"] == ""               # no override while all is well
+    assert out["offColorVar"] == ""
 
 
-def test_the_state_is_said_in_the_middle_of_the_ring() -> None:
-    assert render(states(status="cooking", current=36.2))["state"] == "Cooking"
-    assert render(states(status="cooking", current=24.5))["state"] == "Heating"
-    assert render(states(status="idle"))["state"] == "Off"
-
-
-def test_heating_is_orange_and_counts_down_between_minus_and_plus() -> None:
+def test_heating_fills_the_progress_bar_and_hides_the_steps() -> None:
     out = render(states(status="cooking", remaining=26))
-    assert out["state"] == "Heating"
-    assert out["accent"] == "var(--state-climate-heat-color, #ff6f22)"   # orange while it works
-    assert out["barColor"] == "var(--state-climate-heat-color, #ff6f22)"
+    assert out["barColor"] == "var(--state-climate-heat-color, #ff6f22)"   # orange while it works
     assert out["valueHtml"] == "26<small> min</small>"      # the countdown, where the
     assert out["minusVisibility"] == "hidden"               # step aside, keep their place
     assert out["plusVisibility"] == "hidden"
     assert out["barBackground"] == "var(--divider-color)"
     assert 40 < float(out["fillWidth"].rstrip("%")) < 45
-    assert out["markerCurrent"] == 24.5                    # the marker stays visible
     assert out["startDisabled"] is True
     assert out["stopDisabled"] is False
 
 
 def test_low_water_takes_the_warning_colour() -> None:
     out = render(states(status="cooking", remaining=26, low=True))
-    assert out["state"] == "Low water"
-    assert out["warns"] is True
-    assert out["accent"] == "var(--warning-color, #ffa600)"
+    assert out["heatColorVar"].endswith("var(--warning-color, #ffa600)")
+    assert out["offColorVar"].endswith("var(--warning-color, #ffa600)")
+    assert out["barColor"] == "var(--warning-color, #ffa600)"
     assert out["startDisabled"] is True
     assert out["valueHtml"] == "26<small> min</small>"
-
-
-def test_the_target_temperature_can_be_set_before_the_cook() -> None:
-    out = render(states(status="idle"), drag=57.3)
-    assert out["calls"] == [
-        {
-            "domain": "climate",
-            "service": "set_temperature",
-            "data": {"entity_id": "climate.anova_cooker", "temperature": 57.3},
-        }
-    ]
-
-
-def test_the_temperature_can_still_be_changed_mid_cook() -> None:
-    out = render(states(status="cooking", remaining=26), drag=58.0)
-    assert out["calls"][0]["service"] == "set_temperature"
-    assert out["calls"][0]["data"]["temperature"] == 58.0
 
 
 def test_a_cook_without_a_timer_says_so() -> None:
     out = render(states(status="cooking", remaining=0, duration=0))
     assert out["valueHtml"] == "no timer"
     assert out["fillWidth"] == "0%"
-
-
-def test_dragging_the_temperature_does_not_recentre_the_ring() -> None:
-    """Reported from real use: after a drag the knob jumped back to the middle."""
-    out = render(
-        states(status="idle", target=36.0),
-        drag=40.0,
-        again=[states(status="idle", target=40.0)],
-    )
-    assert out["calls"][0]["data"]["temperature"] == 40.0
-    assert out["trail"][0] == {"min": 26.0, "max": 46.0, "value": 40.0}   # not 30..50 / 50%
-
-
-def test_a_target_from_elsewhere_still_recentres_the_ring() -> None:
-    out = render(states(status="idle", target=36.0), again=[states(status="idle", target=80.0)])
-    assert out["trail"][0] == {"min": 70.0, "max": 90.0, "value": 80.0}
-
-
-def test_a_state_update_while_dragging_leaves_the_dial_alone() -> None:
-    out = render(
-        states(status="idle", target=36.0),
-        actions='slider.listeners["pointerdown"]();',
-        again=[states(status="idle", target=90.0)],
-    )
-    assert out["trail"][0] == {"min": 26.0, "max": 46.0, "value": 36.0}   # the finger wins
 
 
 def test_tapping_the_duration_opens_a_field_to_type_in() -> None:
@@ -360,29 +295,6 @@ def test_the_preset_cannot_be_typed_over_mid_cook() -> None:
     assert out["inputHidden"] is True
 
 
-def test_a_dragged_temperature_shows_at_once_and_survives_a_late_state_update() -> None:
-    """The complaint from real use: the reading lagged behind the finger.
-
-    Dragging asks the cooker for a new temperature; the cooker answers on its next
-    poll, seconds later. Until then the card keeps showing what was asked for, and
-    once the cooker agrees the reported value takes over again.
-    """
-    out = render(
-        states(status="idle", target=36.0),
-        drag=57.0,
-        again=[
-            states(status="idle", target=36.0),   # the poll has not caught up yet
-            states(status="idle", target=57.0),   # the cooker agrees
-            states(status="idle", target=80.0),   # something else moves it later
-        ],
-    )
-    assert "<span>57</span>" in out["immediate"]["center"]   # at once, not after the poll
-    assert out["immediate"]["value"] == 57.0
-    assert out["calls"][0]["data"]["temperature"] == 57.0
-    assert [step["value"] for step in out["trail"]] == [57.0, 57.0, 80.0]
-    assert out["trail"][2] == {"min": 70.0, "max": 90.0, "value": 80.0}
-
-
 def test_a_stepped_duration_shows_at_once() -> None:
     """A stepper that does not move until the next poll feels broken."""
     out = render(
@@ -392,13 +304,18 @@ def test_a_stepped_duration_shows_at_once() -> None:
     )
     assert out["calls"][0]["data"] == {"entity_id": "number.anova_cooker_cook_duration", "value": 65}
     assert out["immediate"]["between"] == "65<small> min</small>"   # before the poll
-    assert out["trail"][0]["value"] == 36.0                # the dial is the temperature
 
 
-def test_tapping_the_temperature_opens_a_field_to_type_in() -> None:
-    out = render(states(status="idle", target=36.0), actions='at(".big").onclick();')
+def test_tapping_the_ring_temperature_opens_a_field_to_type_in() -> None:
+    """The big number lives inside Home Assistant's control; the composed click reaches us."""
+    out = render(
+        states(status="idle", target=36.0),
+        actions=(
+            'at(".dial").listeners["click"]('
+            '{ composedPath: () => [{}, { localName: "ha-big-number" }] });'
+        ),
+    )
     assert out["bigInputHidden"] is False
-    assert out["bigHidden"] is True
     assert out["bigInputValue"] == "36"
 
 
@@ -406,7 +323,8 @@ def test_typing_a_temperature_sets_it() -> None:
     out = render(
         states(status="idle", target=36.0),
         actions=(
-            'at(".big").onclick();'
+            'at(".dial").listeners["click"]('
+            '{ composedPath: () => [{ localName: "ha-big-number" }] });'
             'at(".big-input").value = "57.5";'
             'at(".big-input").onkeydown({ key: "Enter", preventDefault() {} });'
         ),
@@ -419,14 +337,14 @@ def test_typing_a_temperature_sets_it() -> None:
         }
     ]
     assert out["bigInputHidden"] is True
-    assert out["bigHidden"] is False
 
 
 def test_the_temperature_can_be_typed_mid_cook_too() -> None:
     out = render(
         states(status="cooking", remaining=26, target=36.0),
         actions=(
-            'at(".big").onclick();'
+            'at(".dial").listeners["click"]('
+            '{ composedPath: () => [{ localName: "ha-big-number" }] });'
             'at(".big-input").value = "58";'
             'at(".big-input").onkeydown({ key: "Enter", preventDefault() {} });'
         ),
@@ -434,11 +352,24 @@ def test_the_temperature_can_be_typed_mid_cook_too() -> None:
     assert out["calls"][0]["data"]["temperature"] == 58.0
 
 
+def test_a_click_that_is_not_the_big_number_opens_nothing() -> None:
+    out = render(
+        states(status="idle", target=36.0),
+        actions=(
+            'at(".dial").listeners["click"]('
+            '{ composedPath: () => [{ localName: "ha-control-circular-slider" }] });'
+        ),
+    )
+    assert out["bigInputHidden"] is True
+    assert out["calls"] == []
+
+
 def test_escape_leaves_the_temperature_alone() -> None:
     out = render(
         states(status="idle", target=36.0),
         actions=(
-            'at(".big").onclick();'
+            'at(".dial").listeners["click"]('
+            '{ composedPath: () => [{ localName: "ha-big-number" }] });'
             'at(".big-input").value = "99";'
             'at(".big-input").onkeydown({ key: "Escape", preventDefault() {} });'
         ),
@@ -448,27 +379,30 @@ def test_escape_leaves_the_temperature_alone() -> None:
 
 
 def test_an_unreachable_cooker_says_so_and_refuses_to_act() -> None:
-    """The cooker being off must not leave the last reading on screen."""
-    out = render(states(status="unavailable"))
-    assert out["state"] == "Unavailable"
-    assert out["center"] == "—"                          # no stale temperature
-    assert out["cur"] == ""
-    assert out["secondaryHidden"] is True
-    assert out["valueHtml"] == "—"                       # and no stale timer either
-    assert out["accent"] == "var(--disabled-text-color, var(--secondary-text-color))"
-    assert out["sliderDisabled"] is True                 # nothing to drag
+    """The cooker being off must not leave the last reading on screen.
+
+    A dropped link fails the coordinator's update, so the climate entity
+    reports unavailable too and the control renders its unavailable form.
+    """
+    out = render(
+        states(status="unavailable", climate_state="unavailable"),
+        actions=(
+            'at(".dial").listeners["click"]('
+            '{ composedPath: () => [{ localName: "ha-big-number" }] });'
+        ),
+    )
+    assert out["stcStateObj"]["state"] == "unavailable"    # the control says it
+    assert out["valueHtml"] == "—"                         # and no stale timer either
     assert out["minusVisibility"] == "hidden"
+    assert out["bigInputHidden"] is True                   # nothing to type into
     assert out["startDisabled"] is True
     assert out["stopDisabled"] is True
 
 
-def test_without_a_climate_entity_the_ring_is_the_duration_dial() -> None:
-    """A partial entity set still works, and then dragging sets the duration."""
-    out = render(states(status="idle", with_climate=False), drag=90)
-    assert out["immediate"]["center"] == "90<span class=\"unit\">min</span>"  # at once
-    assert out["cur"] == ""
-    assert out["secondaryHidden"] is True
-    assert out["markerCurrent"] is None                   # no marker without a reading
-    assert out["sliderValue"] == 90                       # the dial follows the drag at once
-    assert out["calls"][0]["service"] == "set_value"
-    assert out["calls"][0]["data"] == {"entity_id": "number.anova_cooker_cook_duration", "value": 90}
+def test_without_a_climate_entity_the_ring_stays_hidden() -> None:
+    """A partial entity set still works, and the timer stays usable."""
+    out = render(states(status="idle", with_climate=False))
+    assert out["stcHidden"] is True
+    assert out["valueHtml"] == "60<small> min</small>"
+    assert out["startDisabled"] is False
+    assert out["stopDisabled"] is True
