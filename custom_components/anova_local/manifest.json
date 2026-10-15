@@ -1,20 +1,9 @@
 {
   "domain": "anova_local",
   "name": "Anova Cooker",
-  "version": "0.3.15",
-  "config_flow": true,
-  "documentation": "https://github.com/mbaumannn/home-assistant-anova-local",
-  "issue_tracker": "https://github.com/mbaumannn/home-assistant-anova-local/issues",
-  "iot_class": "local_polling",
-  "dependencies": [
-    "bluetooth_adapters"
-  ],
   "after_dependencies": [
     "frontend",
     "lovelace"
-  ],
-  "requirements": [
-    "bleak-retry-connector>=3.5.0"
   ],
   "bluetooth": [
     {
@@ -24,5 +13,17 @@
   ],
   "codeowners": [
     "@mbaumannn"
-  ]
+  ],
+  "config_flow": true,
+  "dependencies": [
+    "bluetooth_adapters",
+    "http"
+  ],
+  "documentation": "https://github.com/mbaumannn/home-assistant-anova-local",
+  "iot_class": "local_polling",
+  "issue_tracker": "https://github.com/mbaumannn/home-assistant-anova-local/issues",
+  "requirements": [
+    "bleak-retry-connector>=3.5.0"
+  ],
+  "version": "0.3.15"
 }

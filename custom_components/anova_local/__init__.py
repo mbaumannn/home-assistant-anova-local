@@ -17,6 +17,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryNotReady
+from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.typing import ConfigType
 
 from .anova_client import AnovaBLE
@@ -42,6 +43,8 @@ from .const import (
 from .coordinator import AnovaDataUpdateCoordinator
 from .local_server import AnovaLocalServer, AnovaOfflineError
 from .util import format_ble_address
+
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 PLATFORMS: list[Platform] = [
     Platform.CLIMATE,
