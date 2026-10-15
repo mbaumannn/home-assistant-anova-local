@@ -21,10 +21,17 @@ from homeassistant.helpers.typing import ConfigType
 
 from .anova_client import AnovaBLE
 from .const import (
+    CONF_CREATE_DASHBOARD,
     CONF_ID_CARD,
     CONF_LISTEN_PORT,
     CONF_SERVER_HOST,
     CONF_TRANSPORT,
+    DASHBOARD_ICON,
+    DASHBOARD_TITLE,
+    DASHBOARD_URL_PATH,
+    DASHBOARD_VIEW_PATH,
+    DASHBOARD_VIEW_TITLE,
+    DEFAULT_CREATE_DASHBOARD,
     DEFAULT_LISTEN_PORT,
     DOMAIN,
     LOGGER,
@@ -102,6 +109,109 @@ async def _async_ensure_lovelace_resource(hass: HomeAssistant, url: str) -> None
         LOGGER.debug("Anova: could not register the Lovelace resource", exc_info=True)
 
 
+_DASHBOARD_CARD = {"type": "custom:anova-cook-card"}
+
+
+async def _async_ensure_anova_dashboard(
+    hass: HomeAssistant, entry: ConfigEntry
+) -> None:
+    """Create the Anova dashboard once, after the entry is ready.
+
+    Idempotent and polite: a dashboard that exists at ``anova-cook`` is never
+    touched (so the user's deletion is honoured), and when Lovelace runs in
+    YAML mode nothing is created either — the view belongs in their yaml file.
+    Other dashboards are only read, never modified.
+    """
+    if not entry.data.get(CONF_CREATE_DASHBOARD, DEFAULT_CREATE_DASHBOARD):
+        LOGGER.debug(
+            "Anova: the dashboard checkbox was off, so no dashboard is created"
+        )
+        return
+    try:
+        from homeassistant.components import frontend
+        from homeassistant.components.lovelace import LOVELACE_DATA
+        from homeassistant.components.lovelace.dashboard import (
+            DashboardsCollection,
+            LovelaceStorage,
+        )
+    except ImportError:  # pragma: no cover
+        return
+    data = hass.data.get(LOVELACE_DATA)
+    if data is None:
+        LOGGER.debug(
+            "Anova: Lovelace is not loaded, so no dashboard is created yet"
+        )
+        return
+    dashboards = data.dashboards
+    default_dashboard = dashboards.get(None)
+    if not isinstance(default_dashboard, LovelaceStorage) or getattr(
+        data, "yaml_dashboards", {}
+    ):
+        # Newer Home Assistant keeps storage-mode dashboards and the legacy
+        # "mode: yaml" side by side; the yaml_dashboards entries mean the user
+        # maintains their UI in yaml files.
+        LOGGER.debug(
+            "Anova: Lovelace is in YAML mode, so add the view to "
+            "ui-lovelace.yaml by hand; nothing was created"
+        )
+        return
+    if DASHBOARD_URL_PATH in dashboards:
+        LOGGER.debug(
+            "Anova: a dashboard at %s already exists and is left exactly as it is",
+            DASHBOARD_URL_PATH,
+        )
+        return
+    try:
+        # A fresh collection shares the same storage file; loading it up front
+        # is what keeps every existing dashboard intact when we write ours.
+        collection = DashboardsCollection(hass)
+        await collection.async_load()
+        if any(
+            item.get("url_path") == DASHBOARD_URL_PATH for item in collection.data.values()
+        ):
+            LOGGER.debug(
+                "Anova: a dashboard at %s already exists and is left exactly as it is",
+                DASHBOARD_URL_PATH,
+            )
+            return
+        item = await collection.async_create_item(
+            {
+                "url_path": DASHBOARD_URL_PATH,
+                "title": DASHBOARD_TITLE,
+                "icon": DASHBOARD_ICON,
+                "show_in_sidebar": True,
+                "require_admin": False,
+            }
+        )
+        # The lovelace component picks this storage up on the next start; for
+        # the running instance we register the sidebar panel ourselves.
+        dashboard_config = LovelaceStorage(hass, item)
+        await dashboard_config.async_save(
+            {
+                "views": [
+                    {
+                        "title": DASHBOARD_VIEW_TITLE,
+                        "path": DASHBOARD_VIEW_PATH,
+                        "cards": [dict(_DASHBOARD_CARD)],
+                    }
+                ]
+            }
+        )
+        frontend.async_register_built_in_panel(
+            hass,
+            "lovelace",
+            sidebar_title=DASHBOARD_TITLE,
+            sidebar_icon=DASHBOARD_ICON,
+            frontend_url_path=DASHBOARD_URL_PATH,
+            config={"mode": "storage"},
+            require_admin=False,
+            show_in_sidebar=True,
+        )
+        LOGGER.debug("Anova: the dashboard was created at %s", DASHBOARD_URL_PATH)
+    except Exception:  # noqa: BLE001  (the entry stays usable without a dashboard)
+        LOGGER.debug("Anova: the dashboard could not be created", exc_info=True)
+
+
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Register the bundled Lovelace card so users need no extra frontend cards."""
     await _async_register_card(hass)
@@ -153,6 +263,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     try:
         await coordinator.async_config_entry_first_refresh()
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+        await _async_ensure_anova_dashboard(hass, entry)
     except Exception:
         await client.disconnect()
         hass.data[DOMAIN].pop(entry.entry_id, None)
@@ -206,6 +317,7 @@ async def _async_setup_wifi(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         )
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    await _async_ensure_anova_dashboard(hass, entry)
     entry.async_on_unload(entry.add_update_listener(_async_reload))
     return True
 
