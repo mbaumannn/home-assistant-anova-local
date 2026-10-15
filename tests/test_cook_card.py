@@ -296,6 +296,30 @@ def test_a_stale_poll_re_anchors_instead_of_drifting_below_zero() -> None:
     assert float(out["fillWidth"].rstrip("%")) > 1
 
 
+def test_a_just_started_cook_shows_the_countdown_at_once() -> None:
+    """Start pressed: the countdown is the preset at once, never "no timer"."""
+    out = render(
+        states(status="idle", duration=5),
+        actions='at(".start").onclick();',
+    )
+    assert out["calls"][0] == {
+        "domain": "button",
+        "service": "press",
+        "data": {"entity_id": "button.anova_cooker_start_cook"},
+    }
+    assert out["valueHtml"] == "5<small> min</small>"      # anchored at the press
+    assert out["minusVisibility"] == "hidden"              # already mid-cook posture
+    assert out["startDisabled"] is True
+    assert out["stopDisabled"] is False
+
+
+def test_a_preset_of_one_says_no_timer_until_the_countdown_runs() -> None:
+    """A sitting preset is not a countdown: a cook without one says so."""
+    out = render(states(status="cooking", remaining=0, duration=1))
+    assert out["valueHtml"] == "no timer"
+    assert out["fillWidth"] == "0%"
+
+
 def test_tapping_the_duration_opens_a_field_to_type_in() -> None:
     """Pressing the number (or holding -/+) lets you type minutes instead of stepping."""
     out = render(states(status="idle", duration=60), actions='at(".val").onclick();')

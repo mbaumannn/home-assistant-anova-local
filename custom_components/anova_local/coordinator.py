@@ -42,6 +42,7 @@ class AnovaDataUpdateCoordinator(DataUpdateCoordinator[AnovaState]):
             config_entry=config_entry,
         )
         self.client = client
+        self._push_task: asyncio.Task[None] | None = None
         # Why the cooker cannot be reached, in plain words, for the entities and
         # the diagnostics download (filled in by the transport callbacks).
         self.reason: str | None = None
@@ -58,28 +59,34 @@ class AnovaDataUpdateCoordinator(DataUpdateCoordinator[AnovaState]):
     def async_on_cooker_event(self, message: str) -> None:
         """Take an unsolicited line from the cooker.
 
-        Only the end of the cooker's own countdown matters here: at
+        Only the end of the cooker's own countdown changes the plan: at
         ``event time finish`` the cooker keeps heating like an alarm clock
-        instead of stopping, so we stop the heat for it. Everything else is
-        ignored for now.
+        instead of stopping, so we stop the heat for it. Every other event is
+        news the cooker reported on its own — a started timer, a stopped one,
+        a temperature someone changed — so the fresh state is pushed to Home
+        Assistant at once instead of waiting up to two seconds for the poll.
         """
         text = (message or "").strip().lower()
-        if not text.endswith("time finish"):
-            return
-        LOGGER.info("The cooker's countdown finished; stopping the heat")
-        # The event arrives from the link's thread; the real stop runs as a
-        # task on Home Assistant so this callback stays snappy.
-        self.hass.async_create_task(
-            self._async_stop_after_timed_cook(),
-            name="anova timed cook stop",
-        )
+        if text.endswith("time finish"):
+            LOGGER.info("The cooker's countdown finished; stopping the heat")
+            # The event arrives from the link's thread; the real stop runs as a
+            # task on Home Assistant so this callback stays snappy.
+            self.hass.async_create_task(
+                self._async_timed_cook_finished(),
+                name="anova timed cook stop",
+            )
+        elif self._push_task is None or self._push_task.done():
+            self._push_task = self.hass.async_create_task(
+                self._async_push_now(), name="anova cooker event push"
+            )
 
-    async def _async_stop_after_timed_cook(self) -> None:
+    async def _async_timed_cook_finished(self) -> None:
         """Stop the heat because the cooker's own countdown ended.
 
         Stops only while the cooker is still running (a cook that already ended
-        by hand is not touched), then refreshes so the entities show the truth.
-        A transport hiccup is logged, never swallowed silently.
+        by hand is not touched), then pushes the fresh state so the entities
+        show the truth immediately. A transport hiccup is logged, never
+        swallowed silently.
         """
         running = self.data is not None and self.data.status is AnovaStatus.RUNNING
         if running:
@@ -92,8 +99,21 @@ class AnovaDataUpdateCoordinator(DataUpdateCoordinator[AnovaState]):
             else:
                 LOGGER.info("The heat is off; the timed cook is done")
         try:
-            await self.async_request_refresh()
+            await self._async_push_now()
         except Exception as err:  # noqa: BLE001
             LOGGER.warning(
                 "Could not refresh after the timed cook stopped: %s", err
             )
+
+    async def _async_push_now(self) -> None:
+        """Read the cooker once and push the state to everyone without waiting for a poll.
+
+        Raises for the caller to log; each caller knows whether a failed read
+        after its event is worth a warning.
+        """
+        state = await self.client.update_state()
+        if state is None:
+            return
+        result = self.async_set_updated_data(state)
+        if result is not None:
+            await result
