@@ -306,13 +306,17 @@ async def test_the_default_address_is_ipv4(hass) -> None:
 
 
 def _standing_cooker() -> object:
-    """A BluetoothServiceInfoBleak stand-in: the fields the flow's list reads."""
+    """A BluetoothServiceInfoBleak stand-in: the fields the flow's list reads.
+
+    The advertised name lives on ``advertisement`` (an AdvertisementData); the
+    object itself has no ``local_name`` (habluetooth removed it).
+    """
     from types import SimpleNamespace
 
     return SimpleNamespace(
         address=MAC,
         name="Anova",
-        local_name="Anova",
+        advertisement=SimpleNamespace(local_name="Anova"),
         service_uuids=["0000ffe0-0000-1000-8000-00805f9b34fb"],
     )
 
@@ -324,7 +328,7 @@ def _non_cooker() -> object:
     return SimpleNamespace(
         address="<other BLE MAC, redacted>",
         name="My Speaker",
-        local_name="Speaker",
+        advertisement=SimpleNamespace(local_name="Speaker"),
         service_uuids=["0000ffd0-0000-1000-8000-00805f9b34fb"],
     )
 
