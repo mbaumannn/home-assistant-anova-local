@@ -6,7 +6,7 @@ import asyncio
 import pytest
 
 from anova_local.const import AnovaStatus, AnovaUnit
-from anova_local.local_server import AnovaLocalServer, ServerTimings
+from anova_local.local_server import AnovaLocalServer, AnovaServerError, ServerTimings
 from fake_cooker import FakeCooker
 
 pytestmark = pytest.mark.usefixtures("socket_enabled")
@@ -25,12 +25,28 @@ LIVENESS = ServerTimings(
     command=5.0, drain=0.01, write=1.0, liveness=0.3, poll=0.05,
     handshake=2.0, reply_settle=0.05, max_misses=0,
 )
+# A candidate handshake is bounded by the handshake window, not the command one:
+# a silent stranger is dropped when `handshake` elapses even if `command` is long.
+CANDIDATE = ServerTimings(
+    command=5.0, drain=0.01, write=1.0, liveness=5.0, poll=0.05,
+    handshake=0.2, reply_settle=0.05, max_misses=0,
+)
 
 
 async def start(timings: ServerTimings, **kwargs: object) -> AnovaLocalServer:
     server = AnovaLocalServer("127.0.0.1", 0, timings=timings, **kwargs)
     await server.listen()
     return server
+
+
+async def read_to_eof(reader: asyncio.StreamReader, timeout: float = 2.0) -> None:
+    """Wait for the peer to hang up; raise if it does not within ``timeout``."""
+
+    async def drain() -> None:
+        while await reader.read(1024):
+            pass
+
+    await asyncio.wait_for(drain(), timeout)
 
 
 async def test_events_reach_the_callback() -> None:
@@ -260,3 +276,112 @@ async def test_history_records_the_exchange_for_diagnostics() -> None:
             assert entry["at"]
         finally:
             await server.close()
+
+
+async def test_a_silent_stranger_does_not_push_the_cooker_off() -> None:
+    """A device that opens the port and says nothing must not displace the cooker."""
+    published = []
+    async with FakeCooker(current_temp=20.0) as cooker:
+        server = await start(CANDIDATE, on_state=published.append)
+        try:
+            await cooker.dial(server.server_port)
+            await server.wait_for_cooker(timeout=2)
+
+            stranger_reader, stranger_writer = await asyncio.open_connection(
+                "127.0.0.1", server.server_port
+            )
+            # The real link is untouched and keeps publishing.
+            cooker.current_temp = 51.4
+            for _ in range(100):
+                if published and published[-1].current_temp == 51.4:
+                    break
+                await asyncio.sleep(0.02)
+            assert server.connected
+            assert published[-1].current_temp == 51.4
+
+            # The stranger is closed once its own handshake window elapses.
+            await read_to_eof(stranger_reader)
+        finally:
+            await server.close()
+            stranger_writer.close()
+
+
+async def test_a_stranger_sending_garbage_is_dropped() -> None:
+    async with FakeCooker(current_temp=20.0) as cooker:
+        server = await start(CANDIDATE)
+        try:
+            await cooker.dial(server.server_port)
+            await server.wait_for_cooker(timeout=2)
+
+            reader, writer = await asyncio.open_connection("127.0.0.1", server.server_port)
+            writer.write(b"\x00" * 4096)               # not one valid frame
+            await writer.drain()
+            await read_to_eof(reader)
+            assert server.connected                    # the cooker stays the live link
+            assert await server.send("read temp") == "20.0"
+        finally:
+            await server.close()
+            writer.close()
+
+
+async def test_a_stranger_with_the_wrong_key_is_rejected() -> None:
+    async with FakeCooker(id_card="f56-a814c163a33", key="75a17b9d64") as cooker:
+        server = await start(
+            FAST, expected_id_card="f56-a814c163a33", expected_key="75a17b9d64"
+        )
+        try:
+            await cooker.dial(server.server_port)
+            await server.wait_for_cooker(timeout=2)
+
+            async with FakeCooker(key="0000000000") as intruder:
+                await intruder.dial(server.server_port)
+                for _ in range(100):
+                    if not intruder.connected:
+                        break
+                    await asyncio.sleep(0.02)
+                assert not intruder.connected          # refused, never adopted
+
+            assert server.connected                    # the real cooker was never dropped
+            assert await server.send("read temp") == "20.0"
+        finally:
+            await server.close()
+
+
+async def test_the_right_cooker_reconnecting_replaces_the_old_link() -> None:
+    """A real cooker that reconnects after a Wi-Fi blip replaces its stale link."""
+    async with FakeCooker(current_temp=20.0) as stale, FakeCooker(current_temp=33.3) as fresh:
+        server = await start(FAST, expected_key="75a17b9d64")
+        try:
+            await stale.dial(server.server_port)
+            await server.wait_for_cooker(timeout=2)
+
+            await fresh.dial(server.server_port)
+            for _ in range(100):
+                try:
+                    if await server.send("read temp") == "33.3":
+                        break
+                except AnovaServerError:
+                    pass
+                await asyncio.sleep(0.02)
+            assert server.connected
+            # The fresh link answers now; the stale one is gone.
+            assert await server.send("read temp") == "33.3"
+        finally:
+            await server.close()
+
+
+async def test_close_leaves_no_task_behind() -> None:
+    async with FakeCooker() as cooker:
+        server = await start(FAST)
+        await cooker.dial(server.server_port)
+        await server.wait_for_cooker(timeout=2)
+        _silent_reader, silent_writer = await asyncio.open_connection(
+            "127.0.0.1", server.server_port
+        )                                              # a candidate mid-handshake
+        await server.close()
+        silent_writer.close()
+
+    assert server._read_task is None
+    assert server._poll_task is None
+    assert not server._candidates
+    assert not server._cleanup

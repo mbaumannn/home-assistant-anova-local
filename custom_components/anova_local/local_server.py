@@ -89,6 +89,42 @@ class ServerTimings:
     keepalive: float = 30.0
 
 
+class _Link:
+    """One TCP connection: its streams, its frame decoder and its reply queue.
+
+    A fresh connection is a :class:`_Link` that is *not* yet the live one. It is
+    handshaked on its own reader and writer, so a device that merely opens the
+    port cannot disturb the cooker already connected. Only a link that passes
+    the handshake is adopted as the live one.
+    """
+
+    __slots__ = (
+        "reader",
+        "writer",
+        "decoder",
+        "replies",
+        "read_task",
+        "session_task",
+        "id_card",
+        "version",
+        "key",
+    )
+
+    def __init__(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        self.reader = reader
+        self.writer = writer
+        self.decoder = FrameDecoder()
+        # ``None`` is a sentinel the candidate reader queues when its link dies,
+        # so a handshake waiting for a reply gives up instead of hanging.
+        self.replies: asyncio.Queue[str | None] = asyncio.Queue()
+        self.read_task: asyncio.Task[None] | None = None
+        self.session_task: asyncio.Task[None] | None = None
+        # Filled in by the handshake, copied to the server when adopted.
+        self.id_card: str = ""
+        self.version: str = ""
+        self.key: str = ""
+
+
 class AnovaLocalServer:
     """Accepts a cooker connection and exposes it as a transport."""
 
@@ -125,15 +161,16 @@ class AnovaLocalServer:
         self.duration_preset: int = 0
 
         self._server: asyncio.AbstractServer | None = None
-        self._reader: asyncio.StreamReader | None = None
-        self._writer: asyncio.StreamWriter | None = None
-        self._decoder = FrameDecoder()
-        self._replies: asyncio.Queue[str] = asyncio.Queue()
+        # The live link (the cooker that passed the handshake) and the candidates
+        # still proving themselves: a newcomer only becomes the live link after it
+        # has handshaked, so it can never push the real cooker off first.
+        self._link: _Link | None = None
+        self._candidates: set[_Link] = set()
+        self._max_candidates = 2
         self._lock = asyncio.Lock()
         self._ready = asyncio.Event()
         self._offline = asyncio.Event()
         self._read_task: asyncio.Task[None] | None = None
-        self._session_task: asyncio.Task[None] | None = None
         self._poll_task: asyncio.Task[None] | None = None
         self._last: dict[str, str] = {}
         self._state: AnovaState | None = None
@@ -161,6 +198,7 @@ class AnovaLocalServer:
         # Close the link first, then stop listening: wait_closed() also waits for
         # open connections, and the peer keeping its end open must not cost a second.
         self._drop_connection()
+        self._close_candidates()
         await self._drain_cleanup()
         if self._server is not None:
             self._server.close()
@@ -170,8 +208,8 @@ class AnovaLocalServer:
 
     async def _drain_cleanup(self) -> None:
         """Await the tasks a drop cancelled; a cancelled task is not a finished one."""
-        tasks, self._cleanup = self._cleanup, []
-        if tasks:
+        while self._cleanup:
+            tasks, self._cleanup = self._cleanup, []
             with contextlib.suppress(Exception):
                 await asyncio.gather(*tasks, return_exceptions=True)
 
@@ -182,7 +220,8 @@ class AnovaLocalServer:
 
     @property
     def connected(self) -> bool:
-        return self._writer is not None and not self._writer.is_closing()
+        link = self._link
+        return link is not None and not link.writer.is_closing()
 
     @property
     def state(self) -> AnovaState | None:
@@ -223,31 +262,31 @@ class AnovaLocalServer:
                 f"the cooker is not connected (cannot send {redact_command(command)!r})"
             )
         async with self._lock:
-            writer = self._writer
-            if writer is None:
+            link = self._link
+            if link is None:
                 raise AnovaOfflineError(
                     f"the cooker went away (cannot send {redact_command(command)!r})"
                 )
-            self._drain_replies()
-            writer.write(encode(command))
+            self._drain_queue(link.replies)
+            link.writer.write(encode(command))
             try:
-                await asyncio.wait_for(writer.drain(), self.timings.write)
+                await asyncio.wait_for(link.writer.drain(), self.timings.write)
             except (TimeoutError, OSError) as err:
                 self._drop_connection()
                 await self._drain_cleanup()
                 raise AnovaOfflineError(f"the write failed for {redact_command(command)!r}") from err
             if expect_reply is False:
                 await asyncio.sleep(self.timings.reply_settle)
-                self._drain_replies()
+                self._drain_queue(link.replies)
                 self._remember(command, "(accepted without a reply)")
                 return ""
             window = timeout or (
                 self.timings.command if expect_reply is True else self.timings.reply_settle
             )
             try:
-                reply = await asyncio.wait_for(self._replies.get(), window)
+                reply = await asyncio.wait_for(link.replies.get(), window)
             except TimeoutError as err:
-                self._drain_replies()
+                self._drain_queue(link.replies)
                 if expect_reply is None:
                     # Actions are answered with an event (which arrives through
                     # on_event) or with nothing. Silence here is not a failure.
@@ -256,13 +295,21 @@ class AnovaLocalServer:
                     )
                     self._remember(command, "(no reply, an event may follow)")
                     return ""
-                await self._drain_for(self.timings.drain)
+                await self._drain_for(self.timings.drain, link.replies)
                 self._misses += 1
                 self._remember(command, "(no reply)")
                 if self.timings.max_misses and self._misses >= self.timings.max_misses:
                     self._drop_connection()
                     await self._drain_cleanup()
                 raise AnovaTimeoutError(f"no reply to {redact_command(command)!r}") from err
+            if reply is None:
+                # The live reader only ever queues text; a sentinel means the link
+                # died between the write and the reply.
+                self._drop_connection()
+                await self._drain_cleanup()
+                raise AnovaOfflineError(
+                    f"the cooker went away (cannot send {redact_command(command)!r})"
+                )
             if "invalid command" in reply.lower():
                 self._remember(command, reply)
                 raise AnovaRejectedError(f"the cooker rejected {redact_command(command)!r}")
@@ -300,6 +347,7 @@ class AnovaLocalServer:
     async def disconnect(self) -> None:
         """Drop the link. The listener stays up, so the cooker can dial in again."""
         self._drop_connection()
+        self._close_candidates()
         await self._drain_cleanup()
 
     async def set_temp(self, temp: float) -> None:
@@ -356,70 +404,152 @@ class AnovaLocalServer:
             }
         )
 
-    def _drain_replies(self) -> None:
-        while not self._replies.empty():
-            self._replies.get_nowait()
+    @staticmethod
+    def _drain_queue(queue: asyncio.Queue[str | None]) -> None:
+        while not queue.empty():
+            queue.get_nowait()
 
-    async def _drain_for(self, window: float) -> None:
+    async def _drain_for(self, window: float, queue: asyncio.Queue[str | None]) -> None:
         if window <= 0:
             return
         with contextlib.suppress(TimeoutError):
-            await asyncio.wait_for(self._replies.get(), window)
+            await asyncio.wait_for(queue.get(), window)
 
     # -- connection handling ----------------------------------------------
     def _on_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
-        self._drop_connection()
-        self._reader, self._writer = reader, writer
-        self._offline.clear()
-        self._ready.clear()
-        self._misses = 0
+        """A new TCP connection: a candidate, not yet the live link.
+
+        Nothing here touches the cooker that is already connected. The candidate
+        is handshaked on its own streams and only becomes the live link if it
+        passes, so any device that opens the port cannot push the cooker off.
+        """
+        if len(self._candidates) >= self._max_candidates:
+            # Too many strangers are already mid-handshake: hang up at once.
+            with contextlib.suppress(Exception):
+                writer.close()
+            return
+        link = _Link(reader, writer)
+        self._candidates.add(link)
         # The reader runs before the handshake: the handshake waits for replies
         # that only the reader can deliver. Never await a reply in this task.
-        self._read_task = asyncio.create_task(self._read_loop())
-        self._session_task = asyncio.create_task(self._handshake())
+        link.read_task = asyncio.create_task(self._read_candidate(link))
+        link.session_task = asyncio.create_task(self._process_candidate(link))
 
-    async def _handshake(self) -> None:
+    async def _read_candidate(self, link: _Link) -> None:
+        """Deliver a candidate's frames to its own reply queue.
+
+        No liveness window here: the whole candidate handshake is bounded by
+        ``timings.handshake``, which is what closes a silent stranger.
+        """
         try:
-            async with asyncio.timeout(self.timings.handshake):
-                id_card = await self.send("get id card")
-                version = await self.send("version")
-                key = await self.send("get number")
-            id_card = id_card.removeprefix("anova ").strip()
-            key = key.strip()
-            if self.expected_id_card and id_card != self.expected_id_card:
-                raise AnovaRejectedError(
-                    f"another cooker dialled in ({id_card}, expected {self.expected_id_card})"
-                )
-            if self.expected_key and not hmac.compare_digest(key, self.expected_key):
-                # Never put the key in the message: the reply is the secret.
-                raise AnovaRejectedError("the dial-in did not present the expected key")
-            self.id_card = id_card
-            self.version = version
-            self.key = key
-            self.connected_at = datetime.now()
-            LOGGER.info("Anova: cooker connected (%s, firmware %s)", id_card, version)
-            self._poll_task = asyncio.create_task(self._poll_loop())
-            self._ready.set()
+            while True:
+                chunk = await link.reader.read(MAX_FRAME)
+                if not chunk:
+                    raise AnovaOfflineError("the connection closed")
+                for message in link.decoder.feed(chunk):
+                    link.replies.put_nowait(message)
         except asyncio.CancelledError:
             raise
+        except (AnovaOfflineError, FrameError, OSError) as err:
+            LOGGER.debug("Anova: a candidate connection ended: %s", err)
+            link.replies.put_nowait(None)   # wake the handshake so it gives up
+
+    async def _process_candidate(self, link: _Link) -> None:
+        """Handshake a candidate; adopt it on success, close it on failure."""
+        try:
+            async with asyncio.timeout(self.timings.handshake):
+                id_card = await self._exchange(link, "get id card")
+                version = await self._exchange(link, "version")
+                key = await self._exchange(link, "get number")
+            id_card = id_card.removeprefix("anova ").strip()
+            key = key.strip()
+            self._check_identity(id_card, key)
+        except asyncio.CancelledError:
+            self._reject_candidate(link)
+            raise
         except (AnovaServerError, TimeoutError, OSError) as err:
-            LOGGER.debug("Anova: handshake failed: %s", err)
-            self._drop_connection()
+            LOGGER.debug("Anova: a candidate did not pass the handshake: %s", err)
+            self._reject_candidate(link)
             await self._drain_cleanup()
+            return
+        link.id_card = id_card
+        link.version = version
+        link.key = key
+        await self._adopt(link)
+
+    async def _exchange(self, link: _Link, command: str) -> str:
+        """Send one handshake command on ``link`` and wait for its reply."""
+        link.writer.write(encode(command))
+        await asyncio.wait_for(link.writer.drain(), self.timings.write)
+        reply = await asyncio.wait_for(link.replies.get(), self.timings.command)
+        if reply is None:
+            raise AnovaOfflineError("the connection dropped during the handshake")
+        if "invalid command" in reply.lower():
+            raise AnovaRejectedError(f"the cooker rejected {redact_command(command)!r}")
+        self._remember(command, reply)
+        return reply
+
+    def _check_identity(self, id_card: str, key: str) -> None:
+        """Refuse a dial-in that is not the cooker we provisioned."""
+        if self.expected_id_card and id_card != self.expected_id_card:
+            raise AnovaRejectedError(
+                f"another cooker dialled in ({id_card}, expected {self.expected_id_card})"
+            )
+        if self.expected_key and not hmac.compare_digest(key, self.expected_key):
+            # Never put the key in the message: the reply is the secret.
+            raise AnovaRejectedError("the dial-in did not present the expected key")
+
+    def _reject_candidate(self, link: _Link) -> None:
+        """Close a candidate that did not earn the link. Never touches the cooker."""
+        self._candidates.discard(link)
+        self._cancel_task(link.read_task)
+        link.read_task = None
+        with contextlib.suppress(Exception):
+            link.writer.close()
+
+    async def _adopt(self, link: _Link) -> None:
+        """Make a handshaked candidate the live link, replacing any stale one."""
+        self._candidates.discard(link)
+        # The candidate's own reader stops; the live read loop reuses the same
+        # decoder, so bytes it already buffered are not lost.
+        if link.read_task is not None and not link.read_task.done():
+            link.read_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await link.read_task
+        link.read_task = None
+        link.session_task = None
+
+        stale = self._link
+        if stale is not None and stale is not link:
+            self._retire_live(stale)   # replaced, not gone offline
+
+        self._link = link
+        self._misses = 0
+        self.id_card = link.id_card
+        self.version = link.version
+        self.key = link.key
+        self.connected_at = datetime.now()
+        LOGGER.info("Anova: cooker connected (%s, firmware %s)", link.id_card, link.version)
+        self._offline.clear()
+        self._ready.set()
+        self._read_task = asyncio.create_task(self._read_loop())
+        self._poll_task = asyncio.create_task(self._poll_loop())
 
     async def _read_loop(self) -> None:
-        assert self._reader is not None
+        """Read the live link: events reach their callback, replies the queue."""
+        link = self._link
+        assert link is not None
         try:
             while True:
                 try:
                     chunk = await asyncio.wait_for(
-                        self._reader.read(MAX_FRAME), self.timings.liveness
+                        link.reader.read(MAX_FRAME), self.timings.liveness
                     )
                 except TimeoutError as err:
                     raise AnovaOfflineError("no frame within the liveness window") from err
                 if not chunk:
                     raise AnovaOfflineError("the cooker closed the connection")
-                for message in self._decoder.feed(chunk):
+                for message in link.decoder.feed(chunk):
                     if message.startswith(EVENT_PREFIXES):
                         LOGGER.debug("Anova: event %s", message)
                         if self.on_event is not None:
@@ -427,10 +557,12 @@ class AnovaLocalServer:
                         continue
                     # A rejection goes through the queue as well, so the command
                     # that caused it can raise AnovaRejectedError.
-                    self._replies.put_nowait(message)
+                    link.replies.put_nowait(message)
         except asyncio.CancelledError:
             raise
         except (AnovaOfflineError, FrameError, OSError) as err:
+            if link is not self._link:
+                return                     # an old link's reader, already replaced
             LOGGER.debug("Anova: link closed: %s", err)
             self._drop_connection()
             await self._drain_cleanup()
@@ -498,34 +630,59 @@ class AnovaLocalServer:
             return 0.0
 
     def _drop_connection(self) -> None:
-        was_connected = self._writer is not None
-        # Cancel the reader, session and poll tasks, but never ourselves: the read
-        # loop calls this method when the link dies.
-        current = asyncio.current_task()
-        for attribute in ("_read_task", "_session_task", "_poll_task"):
-            task: asyncio.Task[None] | None = getattr(self, attribute)
-            if task is not None and not task.done():
-                if task is current:
-                    # Never cancel ourselves, and keep the reference: a later
-                    # stop() (or the next drop) has to be able to cancel us.
-                    continue
-                task.cancel()
-                self._cleanup.append(task)
-            setattr(self, attribute, None)
-        if self._writer is not None:
+        """Drop the live link and report it offline."""
+        link = self._link
+        self._link = None
+        self._cancel_live_tasks()
+        if link is not None:
             with contextlib.suppress(Exception):
-                self._writer.close()
-        self._writer = None
-        self._reader = None
-        self._drain_replies()
+                link.writer.close()
         self._last.clear()
         self._state = None                           # never publish a stale value again
-        self._decoder = FrameDecoder()
         self._ready.clear()
-        if was_connected:
+        if link is not None:
             # Only a link that existed can go away: waking wait_offline() when
             # nothing was connected would report an offline that never happened.
             self._offline.set()
             LOGGER.info("Anova: cooker offline")
             if self.on_offline is not None:
                 self.on_offline()
+
+    def _retire_live(self, link: _Link) -> None:
+        """Replace the live link without reporting an offline in between."""
+        self._cancel_live_tasks()
+        with contextlib.suppress(Exception):
+            link.writer.close()
+        self._last.clear()
+        self._state = None
+
+    def _cancel_live_tasks(self) -> None:
+        # Cancel the reader and poll tasks, but never ourselves: the read loop
+        # calls _drop_connection when the link dies.
+        current = asyncio.current_task()
+        for attribute in ("_read_task", "_poll_task"):
+            task: asyncio.Task[None] | None = getattr(self, attribute)
+            if task is not None and not task.done():
+                if task is current:
+                    # Never cancel ourselves, and keep the reference: a later
+                    # drop has to be able to cancel us.
+                    continue
+                task.cancel()
+                self._cleanup.append(task)
+            setattr(self, attribute, None)
+
+    def _cancel_task(self, task: asyncio.Task[None] | None) -> None:
+        if task is not None and not task.done():
+            task.cancel()
+            self._cleanup.append(task)
+
+    def _close_candidates(self) -> None:
+        """Cancel and close every candidate still mid-handshake."""
+        for link in list(self._candidates):
+            self._cancel_task(link.session_task)
+            self._cancel_task(link.read_task)
+            link.session_task = None
+            link.read_task = None
+            with contextlib.suppress(Exception):
+                link.writer.close()
+        self._candidates.clear()
