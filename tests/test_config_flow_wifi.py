@@ -69,6 +69,42 @@ class FailingBle(FakeBle):
         return await super().raw_command(command, expect_reply=expect_reply)
 
 
+from custom_components.anova_local.anova_client import AnovaCommandError  # noqa: E402
+
+
+class RealSilenceWifiBle(FakeBle):
+    """Firmware truth: `wifi para` is never answered.
+
+    The provisioner must not wait for a reply on it, or onboarding times out —
+    found live on firmware 6.1.1 (the fake answered "ok" to everything).
+    """
+
+    async def raw_command(self, command: str, *, expect_reply: bool | None = True) -> str:
+        if command.startswith("wifi para"):
+            if expect_reply is not False and expect_reply is not None:
+                raise AnovaCommandError(f"timeout on {command!r}")
+        return await super().raw_command(command, expect_reply=expect_reply)
+
+
+async def test_the_silent_wifi_write_does_not_time_out(hass, a_cooker_in_range) -> None:
+    with patch.object(cf, "AnovaBLE", RealSilenceWifiBle):
+        result = await to_user_form(hass)
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_TRANSPORT: TRANSPORT_WIFI, CONF_ADDRESS: MAC}
+        )
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            {
+                CONF_SSID: "MyHomeWiFi",
+                CONF_PASSWORD: "correct-horse-42",
+                CONF_SERVER_HOST: "127.0.0.1",
+                CONF_LISTEN_PORT: 8080,
+            },
+        )
+    # Onboarding succeeds against the truthful cooker: no reply ≠ failure.
+    assert result["type"] is FlowResultType.CREATE_ENTRY, result.get("errors")
+
+
 @pytest.fixture
 def a_cooker_in_range():
     with (
