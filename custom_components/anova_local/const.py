@@ -8,7 +8,7 @@ LOGGER: Logger = getLogger(__package__)
 
 DOMAIN = "anova_local"
 NAME = "Anova Cooker"
-VERSION = "0.3.14"
+VERSION = "0.3.15"
 MANUFACTURER = "Anova Applied Electronics, Inc"
 
 # BLE
