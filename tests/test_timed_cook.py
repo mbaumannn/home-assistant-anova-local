@@ -89,16 +89,27 @@ async def test_finish_event_while_stopped_sends_no_stop(hass) -> None:
     assert client.stop_calls == 0
 
 
-async def test_other_events_are_ignored(hass) -> None:
+async def test_other_events_push_the_state_at_once(hass) -> None:
+    """Any cooker event is news by definition: the state is pushed, not polled.
+
+    Home Assistant scene changes that feel sluggish today — a timer that only
+    switches on a poll or two after ``start time`` — arrive as an event within
+    moments instead.
+    """
     client = FakeClient(running_state())
     coordinator = coordinator_for(hass, client)
     coordinator.data = running_state()
 
     coordinator.async_on_cooker_event("event ble time start")
-    coordinator.async_on_cooker_event("user changed set temp")
+    await hass.async_block_till_done()
+    coordinator.async_on_cooker_event("event wifi time stop")
     await hass.async_block_till_done()
 
     assert client.stop_calls == 0
+
+    # The second event finds the first push still running, so the state is
+    # read only fresh afterwards — but at least once is guaranteed.
+    assert client.updates >= 1
 
 
 async def test_a_stop_that_fails_is_logged_not_hidden(hass, caplog) -> None:

@@ -357,6 +357,10 @@ class AnovaCookCard extends HTMLElement {
     if (this._state(this._id("low_water")) === "on") return;
     // Optimistic: show the cook running immediately; the cooker is slow.
     this._pending = "start";
+    // The optimistic countdown is anchored here, so the display runs from the
+    // press, not from the moment the cooker confirms the timer.
+    this._startedAt = Date.now();
+    this._countKey = null;
     this._render();
     this._hass.callService("button", "press", { entity_id: this._id("start") });
     clearTimeout(this._timer);
@@ -389,9 +393,16 @@ class AnovaCookCard extends HTMLElement {
    * clock run between polls: 26 whole minutes from the device become a
    * ticking countdown on screen. Display only — the cooker stops itself from
    * its own finish event; nothing here ever commands or measures the cook.
+   *
+   * While the card itself has just asked for a start, ``override`` shows the
+   * preset as the countdown, anchored at ``anchorAt`` (the moment the start
+   * was asked), so nothing flashes "no timer" while the cooker confirms.
    */
-  _tickCountdown(remaining, duration) {
-    if (remaining === undefined) {
+  _tickCountdown(remaining, duration, override = null) {
+    if (override) {
+      remaining = override.remaining;
+      duration = override.duration;
+    } else if (remaining === undefined) {
       // The per-second tick: read the cooker's numbers afresh.
       remaining = Number(this._state(this._id("remaining"))) || 0;
       duration = Number(this._state(this._id("duration"))) || 0;
@@ -400,15 +411,23 @@ class AnovaCookCard extends HTMLElement {
     const fill = this.shadowRoot.querySelector(".fill");
     if (!val || !fill) return;
     const now = Date.now();
-    const key = `${remaining}/${duration}`;
-    if (this._countKey !== key) {
-      // Fresh numbers from the cooker: restart the interpolation here.
-      this._countKey = key;
-      this._remainingAt = now;
-    } else if (now - this._remainingAt > 55000) {
-      // The numbers have not moved for a minute: the poll is stale, re-anchor
-      // so the display cannot drift below the truth.
-      this._remainingAt = now;
+    if (override) {
+      const key = `pending/${override.remaining}/${override.duration}`;
+      if (this._countKey !== key) {
+        this._countKey = key;
+        this._remainingAt = override.anchorAt;      // started at the press
+      }
+    } else {
+      const key = `${remaining}/${duration}`;
+      if (this._countKey !== key) {
+        // Fresh numbers from the cooker: restart the interpolation here.
+        this._countKey = key;
+        this._remainingAt = now;
+      } else if (now - this._remainingAt > 55000) {
+        // The numbers have not moved for a minute: the poll is stale, re-anchor
+        // so the display cannot drift below the truth.
+        this._remainingAt = now;
+      }
     }
     const seconds = Math.max(
       0,
@@ -473,17 +492,26 @@ class AnovaCookCard extends HTMLElement {
 
     // The countdown lives between - and +: the preset while the cooker is off, the
     // remaining minutes while the countdown runs (with the buttons out of the way).
-    // A cook without a timer says so. The bar stays in the layout either way, so the
-    // spacing is the same in every state.
+    // While the card itself has just asked for a start, the countdown is shown at
+    // once — the preset, anchored at the press — and hands over to the cooker's
+    // own numbers when they arrive a breath later. A cook without a timer says
+    // so. The bar stays in the layout either way, so the spacing is the same in
+    // every state.
     const timerOn = this._state(this._id("timer")) === "on";
-    const hasTimer = timerOn || remaining > 0;
+    const optimistic = this._pending === "start" && duration > 0;
+    const hasTimer = timerOn || remaining > 0 || optimistic;
     const bar = root.querySelector(".bar");
     const fill = root.querySelector(".fill");
     const val = root.querySelector(".val");
     if (cooking) {
       if (hasTimer && duration > 0) {
-        this._tickCountdown(remaining, duration);    // paint once, right now
-        this._syncCountdownTimer(true);              // then once per second
+        // Paint once, right now, then once per second.
+        this._tickCountdown(
+          remaining,
+          duration,
+          optimistic ? { remaining: duration, anchorAt: this._startedAt } : null
+        );
+        this._syncCountdownTimer(true);
       } else {
         val.innerHTML = "no timer";
         fill.style.width = "0%";
