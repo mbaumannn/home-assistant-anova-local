@@ -1,6 +1,6 @@
 # Anova Cooker (local) for Home Assistant
 
-[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=mbaumannn&repository=home-assistant-anova-local)
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=mbaumannn&repository=home-assistant-anova-local&category=integration)
 [![Add the Anova Cooker integration to Home Assistant.](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=anova_local)
 
 Local Home Assistant integration for Anova sous-vide cookers with Bluetooth.
