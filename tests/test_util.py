@@ -9,11 +9,11 @@ from anova_local.util import format_ble_address
 @pytest.mark.parametrize(
     ("raw", "expected"),
     [
-        ("<cooker BLE MAC, redacted>", "<cooker BLE MAC, redacted>"),
-        ("<cooker BLE MAC, redacted>", "<cooker BLE MAC, redacted>"),
-        ("<cooker BLE MAC, redacted>", "<cooker BLE MAC, redacted>"),
-        ("<cooker BLE MAC, redacted>", "<cooker BLE MAC, redacted>"),
-        ("<cooker BLE MAC, redacted>", "<cooker BLE MAC, redacted>"),
+        ("AA:BB:CC:DD:EE:01", "AA:BB:CC:DD:EE:01"),
+        ("aa:bb:cc:dd:ee:01", "AA:BB:CC:DD:EE:01"),
+        ("aa-bb-cc-dd-ee-01", "AA:BB:CC:DD:EE:01"),
+        ("aa.bb.cc.dd.ee.01", "AA:BB:CC:DD:EE:01"),
+        ("AABBCCDDEE01", "AA:BB:CC:DD:EE:01"),
     ],
 )
 def test_normalizes_mac_to_uppercase_colon_form(raw, expected):
