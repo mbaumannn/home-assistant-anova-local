@@ -6,6 +6,8 @@ event and stops the heat for it.
 """
 from __future__ import annotations
 
+import logging
+
 import pytest
 from homeassistant.helpers.debounce import Debouncer
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -142,3 +144,161 @@ async def test_a_stop_that_fails_is_logged_not_hidden(hass, caplog) -> None:
     await hass.async_block_till_done()
 
     assert any("Could not stop the heat" in message for message in caplog.text.splitlines())
+
+
+# --- the poll-based fallback: Bluetooth sends no finish event -------------
+
+
+class FakeClock:
+    """A monotonic clock the tests advance by hand."""
+
+    def __init__(self) -> None:
+        self.now = 1_000.0
+
+    def advance(self, seconds: float) -> None:
+        self.now += seconds
+
+
+def _state(status: AnovaStatus, minutes: int, running: bool) -> AnovaState:
+    return AnovaState(
+        status=status,
+        current_temp=41.5,
+        target_temp=57.0,
+        timer_minutes=minutes,
+        timer_running=running,
+        unit=AnovaUnit.CELSIUS,
+    )
+
+
+class ScriptedClient(FakeClient):
+    """Answers polls with a script; an Exception item models a failed poll."""
+
+    def __init__(self, script: list) -> None:
+        super().__init__(running_state())
+        self._script = list(script)
+
+    async def update_state(self) -> AnovaState:
+        self.updates += 1
+        item = self._script.pop(0) if len(self._script) > 1 else self._script[0]
+        if isinstance(item, Exception):
+            raise item
+        return item
+
+
+def _polling_coordinator(hass, script: list, clock: FakeClock):
+    client = ScriptedClient(script)
+    coordinator = coordinator_for(hass, client)
+    coordinator._now = lambda: clock.now
+    return coordinator, client
+
+
+async def test_a_countdown_that_runs_out_stops_the_heat_over_a_poll(hass) -> None:
+    """Bluetooth sends no finish event, so the polled countdown end stops it."""
+    clock = FakeClock()
+    coordinator, client = _polling_coordinator(
+        hass,
+        [_state(AnovaStatus.RUNNING, 1, True), _state(AnovaStatus.RUNNING, 0, False)],
+        clock,
+    )
+
+    await coordinator.async_refresh()   # the countdown is running, a minute left
+    clock.advance(60)
+    await coordinator.async_refresh()   # the next poll: the countdown is gone
+    await hass.async_block_till_done()
+
+    assert client.stop_calls == 1
+
+
+async def test_a_finish_during_a_failed_poll_is_caught_when_the_link_returns(hass) -> None:
+    """A finish during a Bluetooth gap is not lost: the last good state stands."""
+    clock = FakeClock()
+    coordinator, client = _polling_coordinator(
+        hass,
+        [
+            _state(AnovaStatus.RUNNING, 1, True),
+            OSError("the Bluetooth link is down"),
+            _state(AnovaStatus.RUNNING, 0, False),
+        ],
+        clock,
+    )
+
+    await coordinator.async_refresh()   # running
+    clock.advance(30)
+    await coordinator.async_refresh()   # the poll fails; the last good state stands
+    clock.advance(30)
+    await coordinator.async_refresh()   # link back: the countdown is gone
+    await hass.async_block_till_done()
+
+    assert client.stop_calls == 1
+
+
+async def test_a_countdown_cancelled_on_the_device_leaves_the_heat_on(hass) -> None:
+    """A cancel mid-cook is not a finish: the heat must stay on."""
+    clock = FakeClock()
+    coordinator, client = _polling_coordinator(
+        hass,
+        [_state(AnovaStatus.RUNNING, 30, True), _state(AnovaStatus.RUNNING, 0, False)],
+        clock,
+    )
+
+    await coordinator.async_refresh()   # thirty minutes on the clock
+    clock.advance(60)
+    await coordinator.async_refresh()   # cancelled a minute in
+    await hass.async_block_till_done()
+
+    assert client.stop_calls == 0
+
+
+async def test_stopping_the_timer_from_home_assistant_leaves_the_heat_on(hass) -> None:
+    """The timer switch is a cancel, even at the moment the countdown would end."""
+    clock = FakeClock()
+    coordinator, client = _polling_coordinator(
+        hass,
+        [_state(AnovaStatus.RUNNING, 1, True), _state(AnovaStatus.RUNNING, 0, False)],
+        clock,
+    )
+
+    await coordinator.async_refresh()    # one minute left
+    coordinator.note_timer_cancelled()   # the user turns the timer switch off
+    clock.advance(60)                    # right at the natural finish moment
+    await coordinator.async_refresh()
+    await hass.async_block_till_done()
+
+    assert client.stop_calls == 0
+
+
+async def test_a_countdown_gone_with_the_heat_already_off_sends_no_stop(hass) -> None:
+    """A cook that already ended by hand is not touched a second time."""
+    clock = FakeClock()
+    coordinator, client = _polling_coordinator(
+        hass,
+        [_state(AnovaStatus.RUNNING, 1, True), _state(AnovaStatus.STOPPED, 0, False)],
+        clock,
+    )
+
+    await coordinator.async_refresh()
+    clock.advance(60)
+    await coordinator.async_refresh()
+    await hass.async_block_till_done()
+
+    assert client.stop_calls == 0
+
+
+async def test_the_event_and_a_poll_seeing_the_same_finish_stop_once(hass, caplog) -> None:
+    """The Wi-Fi event and a poll race to one stop and one log line."""
+    caplog.set_level(logging.INFO, logger="custom_components.anova_local")
+    clock = FakeClock()
+    coordinator, client = _polling_coordinator(
+        hass,
+        [_state(AnovaStatus.RUNNING, 1, True), _state(AnovaStatus.RUNNING, 0, False)],
+        clock,
+    )
+
+    await coordinator.async_refresh()                            # countdown running
+    coordinator.async_on_cooker_event("event ble time finish")   # the Wi-Fi fast path
+    clock.advance(60)
+    await coordinator.async_refresh()                            # the same finish, polled
+    await hass.async_block_till_done()
+
+    assert client.stop_calls == 1
+    assert sum("countdown finished" in message for message in caplog.messages) == 1
