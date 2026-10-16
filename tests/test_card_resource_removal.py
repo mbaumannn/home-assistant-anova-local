@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import pytest
+from homeassistant.components.frontend import DATA_EXTRA_MODULE_URL
 from homeassistant.components.lovelace import LOVELACE_DATA, LovelaceData
 from homeassistant.components.lovelace.resources import ResourceStorageCollection
 from homeassistant.exceptions import HomeAssistantError
@@ -99,6 +100,36 @@ async def test_removing_the_only_entry_removes_the_card_resource(
     await hass.async_block_till_done()
 
     assert await card_resources(hass) == []
+
+
+async def test_a_re_added_entry_puts_the_card_resource_back(
+    hass, enable_custom_integrations
+) -> None:
+    """Deleting the last entry removes the row; a later entry restores it.
+
+    Both in the same Home Assistant run: the row must not depend on a restart.
+    """
+    install_lovelace(hass)
+    # A real instance has the front end up; the setup path registers the row only
+    # then. State it explicitly so this exercises that path.
+    hass.config.components.add("frontend")
+    hass.data.setdefault(DATA_EXTRA_MODULE_URL, set())
+    entry = wifi_entry()
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    assert len(await card_resources(hass)) == 1
+
+    await hass.config_entries.async_remove(entry.entry_id)
+    await hass.async_block_till_done()
+    assert await card_resources(hass) == []
+
+    again = wifi_entry("AA:BB:CC:DD:EE:FF")
+    again.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(again.entry_id)
+    await hass.async_block_till_done()
+
+    assert len(await card_resources(hass)) == 1
 
 
 async def test_removing_one_of_two_entries_keeps_the_card_resource(

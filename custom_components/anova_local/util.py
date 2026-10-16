@@ -43,12 +43,17 @@ def redact_command(command: str) -> str:
     return command
 
 
+_SECRET_REPLY_COMMANDS = (["get", "number"], ["set", "number"])
+
+
 def redact_reply(command: str, reply: str) -> str:
     """Mask a reply that is itself a secret.
 
-    The reply to ``get number`` is the cooker's own key; every other reply is
-    ordinary device data and is passed through unchanged.
+    The replies to ``get number`` and ``set number`` are the cooker's own key:
+    ``get number`` returns it and the cooker echoes the key it was given on
+    ``set number <key>``. Neither may reach a log line or the diagnostics
+    history. Every other reply is ordinary device data, passed through unchanged.
     """
-    if command.strip().lower() == "get number" and reply:
+    if reply and command.strip().lower().split()[:2] in _SECRET_REPLY_COMMANDS:
         return SECRET_MASK
     return reply
