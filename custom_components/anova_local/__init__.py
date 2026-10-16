@@ -66,17 +66,23 @@ _CARD_FLAG = f"{DOMAIN}_card_registered"
 
 
 async def _async_register_card(hass: HomeAssistant) -> None:
-    """Serve and register the bundled Lovelace card (once)."""
-    if hass.data.get(_CARD_FLAG):
-        return
-    if "http" not in hass.config.components:
-        return
-    await hass.http.async_register_static_paths(
-        [StaticPathConfig(_CARD_URL, str(_CARD_PATH), cache_headers=False)]
-    )
-    hass.data[_CARD_FLAG] = True
+    """Serve the bundled Lovelace card and keep its resource row registered.
+
+    The static path is registered once per run; the front-end module and the
+    Lovelace resource row are ensured on every setup. Removing the last entry
+    deletes the row (``async_remove_entry``), so a later entry in the same run
+    must put it back — the once-only flag must gate only the static path.
+    """
+    if not hass.data.get(_CARD_FLAG):
+        if "http" not in hass.config.components:
+            return
+        await hass.http.async_register_static_paths(
+            [StaticPathConfig(_CARD_URL, str(_CARD_PATH), cache_headers=False)]
+        )
+        hass.data[_CARD_FLAG] = True
+        if "frontend" in hass.config.components:
+            add_extra_js_url(hass, _CARD_RESOURCE_URL)
     if "frontend" in hass.config.components:
-        add_extra_js_url(hass, _CARD_RESOURCE_URL)
         # A Lovelace resource is loaded before a dashboard renders, so the card
         # is defined even when the extra module URL would arrive too late.
         await _async_ensure_lovelace_resource(hass, _CARD_RESOURCE_URL)
@@ -308,7 +314,7 @@ async def _async_remove_anova_dashboard_if_unchanged(hass: HomeAssistant) -> Non
             and content == _anova_dashboard_config()
         )
         if not unchanged:
-            LOGGER.info(
+            LOGGER.warning(
                 "Anova: the dashboard at %s was kept because it was changed; "
                 "delete it under Settings > Dashboards if you no longer need it",
                 DASHBOARD_URL_PATH,

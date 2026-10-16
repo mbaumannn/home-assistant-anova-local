@@ -26,10 +26,11 @@ def render(size: int) -> Image.Image:
     pad = round(stroke / 2) + 2
     box = (pad, pad, size - pad, size - pad)
     draw.arc(box, start=0, end=360, fill=RAIL, width=stroke)  # the rail
-    draw.arc(box, start=-55, end=55, fill=HEAT, width=stroke)  # while heating
-    # The target dot, on the rail, 35 degrees to the right of the top.
+    # The heating arc on the left, filling the way the cook card's ring does.
+    draw.arc(box, start=125, end=235, fill=HEAT, width=stroke)
+    # The target dot, on the rail, 35 degrees to the left of the top.
     radius = size / 2 - pad - stroke / 2
-    angle = math.radians(90 - 35)
+    angle = math.radians(90 + 35)
     cx = size / 2 + radius * math.cos(angle)
     cy = size / 2 - radius * math.sin(angle)
     dot = max(5, round(stroke * 0.75))

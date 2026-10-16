@@ -41,8 +41,10 @@ def test_the_helper_masks_the_wifi_password_and_the_key() -> None:
     assert util.redact_command("status") == "status"
 
 
-def test_the_helper_masks_the_get_number_reply() -> None:
+def test_the_helper_masks_the_key_replies() -> None:
+    # `get number` returns the key and `set number` echoes it back.
     assert util.redact_reply("get number", KEY) == "***"
+    assert util.redact_reply(f"set number {KEY}", KEY) == "***"
     assert util.redact_reply("read temp", "27.4") == "27.4"
 
 
@@ -94,7 +96,7 @@ def install(monkeypatch, transport: FakeBleTransport) -> None:
 def replies() -> dict[str, str]:
     return {
         "get id card": f"anova {ID_CARD}",
-        f"set number {KEY}": "ok",
+        f"set number {KEY}": KEY,   # the cooker echoes the key it was given
         "server para 192.168.2.60 8080": "ok",
         f"wifi para 2 {SSID} {PASSWORD} WPA2PSK AES": "ok",
     }
