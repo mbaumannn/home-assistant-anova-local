@@ -11,7 +11,7 @@ import time
 from datetime import timedelta
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.update_coordinator import (
     DataUpdateCoordinator,
     UpdateFailed,
@@ -77,6 +77,16 @@ class AnovaDataUpdateCoordinator(DataUpdateCoordinator[AnovaState]):
         """Record why the cooker cannot be reached, in the user's words."""
         self.last_failure = failure_for("offline")
         self.reason = self.last_failure.check
+
+    @callback
+    def async_set_update_error(self, err: Exception) -> None:
+        """A push-reported failure (the Wi-Fi server going offline).
+
+        The pull path records the reason in :meth:`_async_update_data`; this is
+        the same thing for the transports that tell us instead of being asked.
+        """
+        self._note_offline()
+        super().async_set_update_error(err)
 
     def _now(self) -> float:
         """Monotonic seconds; a seam so the tests can drive the countdown."""

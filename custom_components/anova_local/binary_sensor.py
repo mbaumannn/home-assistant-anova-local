@@ -9,7 +9,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN, AnovaStatus
+from .const import DOMAIN, LOW_WATER_REASON, AnovaStatus
 from .coordinator import AnovaDataUpdateCoordinator
 from .entity import AnovaEntity
 
@@ -38,3 +38,10 @@ class AnovaLowWater(AnovaEntity, BinarySensorEntity):
         if self.coordinator.data is None:
             return None
         return self.coordinator.data.status is AnovaStatus.LOW_WATER
+
+    @property
+    def extra_state_attributes(self) -> dict[str, object] | None:
+        attributes = dict(super().extra_state_attributes or {})
+        if self.is_on:
+            attributes["friendly_reason"] = LOW_WATER_REASON
+        return attributes

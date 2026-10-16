@@ -124,3 +124,14 @@ STATUS_LABELS = {
     AnovaStatus.LOW_WATER: "low water",
 }
 STATUS_LABEL_OPTIONS = ["idle", "cooking", "low water"]
+
+# A sentence per state, so the status sensor reads as what is happening, not just
+# a word. Shown as the sensor's ``description`` attribute.
+STATUS_DESCRIPTIONS = {
+    AnovaStatus.STOPPED: "Waiting for a target temperature and a start.",
+    AnovaStatus.RUNNING: "Heating to the target temperature, or holding it there.",
+    AnovaStatus.LOW_WATER: "The water is below the minimum; top up the water.",
+}
+
+# Shown as the low-water sensor's ``friendly_reason`` while it is on.
+LOW_WATER_REASON = "The water is below the minimum; top up the water."

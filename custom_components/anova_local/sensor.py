@@ -10,7 +10,7 @@ from homeassistant.const import UnitOfTime
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN, STATUS_LABEL_OPTIONS, STATUS_LABELS
+from .const import DOMAIN, STATUS_DESCRIPTIONS, STATUS_LABEL_OPTIONS, STATUS_LABELS
 from .coordinator import AnovaDataUpdateCoordinator
 from .entity import AnovaEntity
 
@@ -41,6 +41,13 @@ class AnovaStatusSensor(AnovaEntity, SensorEntity):
         if self.coordinator.data is None:
             return None
         return STATUS_LABELS[self.coordinator.data.status]
+
+    @property
+    def extra_state_attributes(self) -> dict[str, object] | None:
+        attributes = dict(super().extra_state_attributes or {})
+        if self.coordinator.data is not None:
+            attributes["description"] = STATUS_DESCRIPTIONS[self.coordinator.data.status]
+        return attributes
 
 
 class AnovaRemainingSensor(AnovaEntity, SensorEntity):
