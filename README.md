@@ -41,6 +41,14 @@ Requires Home Assistant 2026.5.0 or newer.
 1. In HACS, search for **Anova Cooker** and download it.
 2. Restart Home Assistant.
 
+## What you need
+- An Anova Precision Cooker with **Bluetooth and Wi-Fi** (the 900 W models). A
+  Bluetooth-only 800 W model has no Wi-Fi radio and stays on Bluetooth.
+- Home Assistant 2026.5.0 or newer, and a Bluetooth adapter (or an ESPHome
+  Bluetooth proxy) within a few metres of the cooker, **for the setup only**.
+- Your **2.4 GHz** Wi-Fi name and password. The cooker cannot join a network
+  name that contains a space.
+
 ## Setting up the cooker
 Turn the cooker on. Home Assistant discovers it within a minute; select
 **Configure**. Choose how Home Assistant should talk to it: **Wi-Fi (local
@@ -72,6 +80,17 @@ both behind.
 
 A cooker you moved to Wi-Fi keeps its Wi-Fi and server settings after the
 integration is removed; only the Anova app resets them.
+
+### Undo
+- The setup writes three things to the cooker: a fresh security key, this Home
+  Assistant's address, and your Wi-Fi network. They survive a reboot.
+- To put the cooker back on Anova's cloud, run the Anova app's own Wi-Fi setup
+  again: it overwrites the address and the key.
+- To stop the local server, delete the integration (Settings → Devices & services
+  → Anova Cooker → ⋮ → Delete). The cooker keeps dialling the address it was
+  given until the app, or a reset on the cooker, changes it.
+- To remove the integration itself: HACS → Anova Cooker (local) → ⋮ → **Remove**,
+  then restart Home Assistant.
 
 ## Entities
 - `climate.anova_cooker`: off/heat, target temperature, current water temperature
@@ -106,6 +125,24 @@ it to any dashboard, or use the **Anova** dashboard created during setup.
 Bluetooth range matters. Keep the adapter, or a Bluetooth proxy, close to the
 cooker. An ESPHome Bluetooth proxy in the kitchen is recommended when the
 server is far away.
+
+## If something goes wrong
+The setup and the connection tell you what is wrong and what to check:
+
+| What you see | What it means | What to do |
+|---|---|---|
+| "The cooker did not answer over Bluetooth..." | Nothing advertises | Is the cooker plugged in and switched on? Its ring should be lit. |
+| "Something else is connected to the cooker." | Its one Bluetooth link is held | Close the Anova app, and any other phone or integration connected to it. |
+| "The cooker cannot use this network..." | The name has a space, or the password is not 8 to 63 characters | Use the 2.4 GHz name without spaces, and a WPA2 password of 8 to 63 characters. |
+| "The cooker did not join the network within two minutes..." | It did not dial in | Check the password and the 2.4 GHz name, and keep it near the access point while it joins. |
+| "This cooker's firmware does not accept the local server setting..." | The firmware is too old for Wi-Fi control | Use Bluetooth instead, and report it with the firmware version. |
+| "Home Assistant cannot listen on this port." | The port is taken | Choose another port; the cooker is told which port to use, so any free port works. |
+| The entities say `unavailable` | The cooker stopped answering | Check that it is still switched on and within range. |
+
+For anything else, attach the **Diagnostics** download (Settings → Devices &
+services → Anova Cooker → ⋮ → Download diagnostics). It carries the version, the
+transport, the firmware and the last exchanges, and no password, key, id card or
+MAC address.
 
 ## Notifications
 Two automation blueprints ship with this repository. Import them once
