@@ -174,3 +174,20 @@ async def test_the_server_history_masks_the_get_number_reply(caplog) -> None:
         assert DEFAULT_KEY not in exchange["command"]
         assert DEFAULT_KEY not in exchange["reply"]
     assert DEFAULT_KEY not in caplog.text
+
+
+async def test_the_ble_client_keeps_a_masked_history(monkeypatch) -> None:
+    """The Bluetooth exchanges are kept for diagnostics, with no secrets."""
+    install(monkeypatch, FakeBleTransport(replies()))
+    anova = AnovaBLE(ble_device=object())
+
+    await anova.raw_command("get id card")
+    await anova.raw_command(f"set number {KEY}")
+
+    history = list(anova.history)
+    assert any(exchange["command"] == "set number ***" for exchange in history)
+    assert all(
+        KEY not in exchange["command"] and KEY not in exchange["reply"]
+        for exchange in history
+    )
+    assert all("at" in exchange for exchange in history)

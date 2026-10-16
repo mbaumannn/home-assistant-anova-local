@@ -3,7 +3,10 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+from collections import deque
 from collections.abc import Callable
+from datetime import datetime
+from typing import Any
 
 from bleak_retry_connector import (
     BleakClient,
@@ -128,6 +131,9 @@ class AnovaBLE:
         # cook writes this value to the cooker so the device timer matches the
         # preset shown in Home Assistant.
         self.duration_preset: int = 0
+        # The last exchanges, for the diagnostics download. Redacted before they
+        # are stored, exactly like the local server's history.
+        self.history: deque[dict[str, Any]] = deque(maxlen=10)
 
     def set_ble_device(self, device: BLEDevice) -> None:
         """Update the device when it advertises again (auto-connect).
@@ -292,6 +298,13 @@ class AnovaBLE:
 
         reply = buffer.decode(errors="ignore").strip()
         LOGGER.debug("Anova %r -> %r", redact_command(command), redact_reply(command, reply))
+        self.history.append(
+            {
+                "command": redact_command(command),
+                "reply": redact_reply(command, reply),
+                "at": datetime.now().isoformat(timespec="seconds"),
+            }
+        )
         return reply
 
     async def raw_command(self, command: str, *, expect_reply: bool | None = True) -> str:
