@@ -19,7 +19,7 @@ from homeassistant.helpers.selector import (
     SelectSelectorMode,
 )
 
-from .anova_client import AnovaBLE
+from .anova_client import AnovaBLE, AnovaCommandError, AnovaConnectionError
 from .const import (
     CONF_CREATE_DASHBOARD,
     CONF_ID_CARD,
@@ -37,9 +37,9 @@ from .const import (
     TRANSPORT_BLUETOOTH,
     TRANSPORT_WIFI,
 )
+from .errors import failure_for
 from .provisioning import (
     AnovaProvisioner,
-    ProvisioningError,
     WifiCredentialsInvalid,
     validate_credentials,
 )
@@ -49,6 +49,17 @@ TRANSPORTS = {
     TRANSPORT_BLUETOOTH: "Bluetooth (direct)",
     TRANSPORT_WIFI: "Wi-Fi (local server)",
 }
+
+
+def _provision_failure_key(err: Exception) -> str:
+    """Map a provisioning failure to its message key.
+
+    A refused write (``OSError``) is an ordinary failure; a lost or unresponsive
+    link means something else is holding the cooker's single Bluetooth link.
+    """
+    if isinstance(err, (AnovaConnectionError, AnovaCommandError, TimeoutError)):
+        return "ble_busy"
+    return "provision_failed"
 
 # The two lines the manifest's discovery matcher uses: the config flow's cooker
 # list filters on the same pair, so the dropdown names exactly the cookers that
@@ -234,14 +245,15 @@ class AnovaConfigFlow(ConfigFlow, domain=DOMAIN):
         try:
             validate_credentials(ssid, password)
         except WifiCredentialsInvalid as err:
-            LOGGER.debug("Anova: the cooker cannot use these credentials: %s", err)
-            return {"base": "wifi_credentials_invalid"}
+            failure = failure_for("wifi_credentials_invalid")
+            LOGGER.debug("Anova: %s (%s)", failure.check, failure.cause)
+            return {"base": failure.key}
 
         device = bluetooth.async_ble_device_from_address(
             self.hass, (self._address or "").upper(), connectable=True
         )
         if device is None:
-            return {"base": "not_found"}
+            return {"base": failure_for("not_found").key}
 
         provisioner = AnovaProvisioner(lambda: AnovaBLE(ble_device=device))
         try:
@@ -251,12 +263,10 @@ class AnovaConfigFlow(ConfigFlow, domain=DOMAIN):
                 host=user_input[CONF_SERVER_HOST],
                 port=user_input[CONF_LISTEN_PORT],
             )
-        except ProvisioningError as err:
-            LOGGER.warning("Anova onboarding failed: %s", err)
-            return {"base": "provision_failed"}
-        except Exception:  # noqa: BLE001  (a transport failure is the user's to retry)
-            LOGGER.warning("Anova onboarding failed with a link error", exc_info=True)
-            return {"base": "provision_failed"}
+        except Exception as err:  # noqa: BLE001  (the link is the user's to retry)
+            failure = failure_for(_provision_failure_key(err))
+            LOGGER.warning("Anova onboarding failed: %s (%s)", failure.check, failure.cause)
+            return {"base": failure.key}
 
         self._provisioned = {CONF_ID_CARD: id_card, CONF_KEY: provisioner.key}
         return {}

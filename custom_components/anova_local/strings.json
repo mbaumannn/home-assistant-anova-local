@@ -37,7 +37,13 @@
     "error": {
       "not_found": "The cooker did not answer over Bluetooth. Is it plugged in and switched on? The ring should be lit.",
       "unsupported": "The cooker answered, but not in a way this integration understands. Please report this with your firmware version.",
+      "ble_busy": "Something else is connected to the cooker. Close the Anova app, and any other phone or integration that is connected, and try again.",
       "wifi_credentials_invalid": "The cooker cannot use this network: its name may not contain a space, and the password must be 8 to 63 characters.",
+      "wifi_not_joined": "The cooker did not join the network within two minutes. Check the password, make sure the name is the 2.4 GHz one, and keep the cooker near the access point while it connects.",
+      "firmware_unsupported": "This cooker's firmware does not accept the local server setting, so Wi-Fi control is not possible on this device. Please report it with the firmware version.",
+      "port_in_use": "Home Assistant cannot listen on this port. Choose another one; the cooker is told which port to use, so any free port works.",
+      "offline": "The cooker stopped answering. Is it still switched on and within range?",
+      "unexpected_cooker": "A different cooker dialled in. Remove and re-add the integration if you replaced the cooker.",
       "provision_failed": "The settings could not be written. Keep the cooker within a few metres of Home Assistant, close the Anova app, and check the log for the reason."
     },
     "abort": {

@@ -18,6 +18,7 @@ from homeassistant.helpers.update_coordinator import (
 )
 
 from .const import DOMAIN, LOGGER, TIMER_FINISH_TOLERANCE, AnovaStatus
+from .errors import Failure, failure_for
 from .state import AnovaState
 from .transport import AnovaTransport
 
@@ -53,18 +54,29 @@ class AnovaDataUpdateCoordinator(DataUpdateCoordinator[AnovaState]):
         self._finish_handled = False
         self._timer_cancelled_by_us = False
         # Why the cooker cannot be reached, in plain words, for the entities and
-        # the diagnostics download (filled in by the transport callbacks).
+        # the diagnostics download. Filled in when a read fails, cleared when it
+        # succeeds.
         self.reason: str | None = None
+        self.last_failure: Failure | None = None
 
     async def _async_update_data(self) -> AnovaState:
         try:
             state = await self.client.update_state()
         except Exception as err:  # noqa: BLE001
+            self._note_offline()
             raise UpdateFailed(str(err)) from err
         if state is None:
+            self._note_offline()
             raise UpdateFailed("the cooker is not connected")
+        self.last_failure = None
+        self.reason = None
         self._observe(state)
         return state
+
+    def _note_offline(self) -> None:
+        """Record why the cooker cannot be reached, in the user's words."""
+        self.last_failure = failure_for("offline")
+        self.reason = self.last_failure.check
 
     def _now(self) -> float:
         """Monotonic seconds; a seam so the tests can drive the countdown."""
