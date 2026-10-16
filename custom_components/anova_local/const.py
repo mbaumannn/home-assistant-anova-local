@@ -8,7 +8,7 @@ LOGGER: Logger = getLogger(__package__)
 
 DOMAIN = "anova_local"
 NAME = "Anova Cooker"
-VERSION = "0.4.1"
+VERSION = "0.4.2"
 MANUFACTURER = "Anova Applied Electronics, Inc"
 
 # BLE
@@ -97,6 +97,11 @@ DASHBOARD_VIEW_PATH = "anova"
 # finish", "user changed ..."). Both transports route these to
 # :meth:`AnovaDataUpdateCoordinator.async_on_cooker_event`.
 EVENT_PREFIXES: tuple[str, ...] = ("event", "user changed")
+# The cooker reports its countdown in whole minutes, so the wire's "remaining"
+# is a ceiling: at the finish, "now" can be up to a minute short of the last
+# reading's expected end. Within this window a stopped countdown counts as the
+# finish, not a cancel.
+TIMER_FINISH_TOLERANCE = 60.0
 
 
 class AnovaStatus(str, Enum):

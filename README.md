@@ -86,7 +86,8 @@ integration is removed; only the Anova app resets them.
 
 Entity IDs depend on the device name; the list above shows the defaults. The
 timer starts on `start time` and runs on the wall clock, so warm-up time is
-included in the countdown.
+included in the countdown. If Home Assistant is not running when the countdown
+ends, the heat is not switched off; the planned v0.5.0 cook plan closes this.
 
 ## Cook card
 `custom:anova-cook-card` is registered automatically. It shows Home Assistant's

@@ -39,5 +39,7 @@ class AnovaTimer(AnovaEntity, SwitchEntity):
         await self.coordinator.async_quick_refresh()
 
     async def async_turn_off(self, **kwargs) -> None:
+        # A timer stopped on purpose is not a finished cook: the heat stays on.
+        self.coordinator.note_timer_cancelled()
         await self.coordinator.client.stop_timer()
         await self.coordinator.async_quick_refresh()
