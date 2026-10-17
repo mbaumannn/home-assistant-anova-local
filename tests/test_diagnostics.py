@@ -105,5 +105,5 @@ async def test_mac_addresses_are_nowhere_in_the_dump(hass, enable_custom_integra
 
 
 def test_the_mac_mask_is_applied_to_every_string() -> None:
-    masked = _redact({"a": "at AA:BB:CC:DD:EE:01", "b": ["10:ce:a9:04:03:be", 3]})
+    masked = _redact({"a": "at AA:BB:CC:DD:EE:01", "b": ["AA:BB:CC:DD:EE:02", 3]})
     assert masked == {"a": "at ***", "b": ["***", 3]}
