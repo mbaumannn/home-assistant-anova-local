@@ -161,10 +161,10 @@ Two automation blueprints ship with this repository. Import them once
 one-click link opens the dialog without filling the URL, paste the raw URL shown
 with it:
 
-- **Cook timer stopped** — [add it with one click](https://my.home-assistant.io/redirect/blueprint_import?blueprint_url=https://raw.githubusercontent.com/mbaumannn/home-assistant-anova-local/main/blueprints/automation/anova_local/anova_cook_finished.yaml) ·
+- **Cook timer stopped**: [add it with one click](https://my.home-assistant.io/redirect/blueprint_import?blueprint_url=https://raw.githubusercontent.com/mbaumannn/home-assistant-anova-local/main/blueprints/automation/anova_local/anova_cook_finished.yaml) ·
   raw URL: `https://raw.githubusercontent.com/mbaumannn/home-assistant-anova-local/main/blueprints/automation/anova_local/anova_cook_finished.yaml`
   Notifies when the timer runs out. On firmware 6.1.1 the cooker reports the same state for a finished and a cancelled timer, so the blueprint fires on either; a lost connection does not fire it.
-- **Water reached temperature** — [add it with one click](https://my.home-assistant.io/redirect/blueprint_import?blueprint_url=https://raw.githubusercontent.com/mbaumannn/home-assistant-anova-local/main/blueprints/automation/anova_local/anova_reached_temperature.yaml) ·
+- **Water reached temperature**: [add it with one click](https://my.home-assistant.io/redirect/blueprint_import?blueprint_url=https://raw.githubusercontent.com/mbaumannn/home-assistant-anova-local/main/blueprints/automation/anova_local/anova_reached_temperature.yaml) ·
   raw URL: `https://raw.githubusercontent.com/mbaumannn/home-assistant-anova-local/main/blueprints/automation/anova_local/anova_reached_temperature.yaml`
   Notifies when the water reaches the target temperature, only during an active cook and while the cooker is connected.
 
