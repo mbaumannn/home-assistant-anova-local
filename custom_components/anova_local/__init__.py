@@ -71,7 +71,7 @@ async def _async_register_card(hass: HomeAssistant) -> None:
     The static path is registered once per run; the front-end module and the
     Lovelace resource row are ensured on every setup. Removing the last entry
     deletes the row (``async_remove_entry``), so a later entry in the same run
-    must put it back — the once-only flag must gate only the static path.
+    must put it back; the once-only flag must gate only the static path.
     """
     if not hass.data.get(_CARD_FLAG):
         if "http" not in hass.config.components:
