@@ -50,16 +50,24 @@ Requires Home Assistant 2026.5.0 or newer.
   name that contains a space.
 
 ## Setting up the cooker
-Turn the cooker on. Home Assistant discovers it within a minute; select
-**Configure**. Choose how Home Assistant should talk to it: **Wi-Fi (local
-server)**, which is offered first, or **Bluetooth (direct)**.
+Turn the cooker on. Home Assistant discovers it within a minute:
+
+![The Anova Cooker discovery card](docs/images/discovery.png)
+
+Select **Configure**. Choose how Home Assistant should talk to it: **Wi-Fi
+(local server)**, which is offered first, or **Bluetooth (direct)**:
+
+![Choosing Wi-Fi (local server) or Bluetooth (direct)](docs/images/setup-connection.png)
 
 You can also add it yourself: Settings → Devices & services → **Add
 integration** → Anova Cooker. The cookers Home Assistant has seen over
 Bluetooth are listed to pick from; type the address printed under the cooker
 only if yours is not in the list.
 
-For Wi-Fi you then enter your network name (2.4 GHz only) and password.
+For Wi-Fi you then enter your network name (2.4 GHz only) and password:
+
+![The Wi-Fi form, asking for the network name and password](docs/images/setup-wifi.png)
+
 Home Assistant writes a fresh security key, its own address and the network to
 the cooker over Bluetooth, and the cooker joins your Wi-Fi about a minute later.
 Close the Anova app first: the cooker accepts one Bluetooth connection at a
@@ -114,6 +122,8 @@ own thermostat ring for the target temperature, a duration stepper, the live
 countdown and one-tap Start and Stop, and it warns when the water is low. Add
 it to any dashboard, or use the **Anova** dashboard created during setup.
 
+![The Anova Cooker card during a cook](docs/images/cook-card.png)
+
 ## Connection
 - **Bluetooth:** turn the cooker on and the entities come online; turn it off
   and they become `unavailable`. The cooker supports one Bluetooth connection
@@ -131,6 +141,7 @@ The setup and the connection tell you what is wrong and what to check:
 
 | What you see | What it means | What to do |
 |---|---|---|
+| Nothing appears under **Discovered** | Home Assistant only offers a device it is *currently* hearing advertise, so a weak signal, a busy cooker, or a stale Bluetooth record can hide a cooker it has seen before | Keep the cooker within a couple of metres of Home Assistant, power-cycle it, and restart Home Assistant. You can also skip discovery: **Add integration → Anova Cooker**, then pick the cooker from the list or type the address from the label underneath it. |
 | "The cooker did not answer over Bluetooth..." | Nothing advertises | Is the cooker plugged in and switched on? Its ring should be lit. |
 | "Something else is connected to the cooker." | Its one Bluetooth link is held | Close the Anova app, and any other phone or integration connected to it. |
 | "The cooker cannot use this network..." | The name has a space, or the password is not 8 to 63 characters | Use the 2.4 GHz name without spaces, and a WPA2 password of 8 to 63 characters. |
@@ -156,6 +167,29 @@ with it:
 - **Water reached temperature** — [add it with one click](https://my.home-assistant.io/redirect/blueprint_import?blueprint_url=https://raw.githubusercontent.com/mbaumannn/home-assistant-anova-local/main/blueprints/automation/anova_local/anova_reached_temperature.yaml) ·
   raw URL: `https://raw.githubusercontent.com/mbaumannn/home-assistant-anova-local/main/blueprints/automation/anova_local/anova_reached_temperature.yaml`
   Notifies when the water reaches the target temperature, only during an active cook and while the cooker is connected.
+
+### Making the blueprint actually notify you
+Importing a blueprint only puts it in your library. It does **not** create an
+automation, and it picks nothing for you. So there are three steps:
+
+1. **Import** it (the one-click link above, or Settings → Automations & scenes →
+   Blueprints → **Import Blueprint**).
+2. **Create the automation from it**: Settings → Automations & scenes → **Create
+   automation → Create from blueprint** (or the blueprint's ⋮ menu → *Create
+   automation from blueprint*).
+3. **Fill in the fields and Save.** What each blueprint asks for:
+
+   | Blueprint | Fields to fill |
+   |---|---|
+   | Cook timer stopped | **Anova timer switch** → `switch.anova_cooker_timer`, **Anova timer remaining** → `sensor.anova_cooker_timer_remaining`, **Notify target** |
+   | Water reached temperature | **Anova climate** → `climate.anova_cooker`, **Notify target** |
+
+**Notify target** is the step that trips people up. It has to be a **notify
+entity**, not a service: the Home Assistant companion app creates one per phone
+(open **Settings → Devices & services → your phone**, and look for the *Notify*
+entity, named like `notify.mobile_app_yourphone`). Pick that. If you leave it
+empty or point it at the wrong thing, the automation still saves but there is
+nowhere for the message to go, and nothing tells you.
 
 ## Security and privacy
 - No cloud, no account, no telemetry. The integration talks to the cooker on
