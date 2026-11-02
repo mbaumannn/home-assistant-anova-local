@@ -411,6 +411,7 @@ async def _async_setup_wifi(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     server = AnovaLocalServer(
         host,
         port,
+        bind_host="0.0.0.0",
         expected_id_card=entry.data.get(CONF_ID_CARD) or None,
         expected_key=key,
     )
