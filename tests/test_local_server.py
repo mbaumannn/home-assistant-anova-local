@@ -109,3 +109,16 @@ async def test_update_state_is_none_until_a_cooker_is_there() -> None:
         assert server.state is None
     finally:
         await server.close()
+
+
+
+async def test_listener_binds_all_interfaces_without_changing_cooker_host() -> None:
+    server = AnovaLocalServer("192.0.2.10", 0, timings=FAST)
+    await server.listen()
+    try:
+        assert server.host == "192.0.2.10"
+        assert server.bind_host == "0.0.0.0"
+        assert server._server is not None
+        assert server._server.sockets[0].getsockname()[0] == "0.0.0.0"
+    finally:
+        await server.close()
