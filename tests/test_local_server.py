@@ -16,7 +16,7 @@ from anova_local.local_server import (
     AnovaTimeoutError,
     ServerTimings,
 )
-from fake_cooker import FakeCooker
+from fake_cooker import DEFAULT_KEY, FakeCooker
 
 pytestmark = pytest.mark.usefixtures("socket_enabled")
 
@@ -28,6 +28,7 @@ FAST = ServerTimings(
 
 async def served(cooker: FakeCooker, **kwargs: object) -> AnovaLocalServer:
     """A started server with one cooker dialled in and handshaken."""
+    kwargs.setdefault("expected_key", DEFAULT_KEY)
     server = AnovaLocalServer("127.0.0.1", 0, timings=FAST, **kwargs)
     await server.listen()
     await cooker.dial(server.server_port)
@@ -91,8 +92,14 @@ async def test_send_can_be_fire_and_forget_for_silent_commands() -> None:
             await server.close()
 
 
+def test_a_server_without_a_key_refuses_to_be_constructed() -> None:
+    """Fail closed: with no key the server would accept any device that dials in."""
+    with pytest.raises(ValueError, match="key"):
+        AnovaLocalServer("127.0.0.1", 0, expected_key="")
+
+
 async def test_send_on_a_server_without_a_cooker_raises() -> None:
-    server = AnovaLocalServer("127.0.0.1", 0, timings=FAST)
+    server = AnovaLocalServer("127.0.0.1", 0, timings=FAST, expected_key=DEFAULT_KEY)
     await server.listen()
     try:
         with pytest.raises(AnovaOfflineError):
@@ -102,7 +109,7 @@ async def test_send_on_a_server_without_a_cooker_raises() -> None:
 
 
 async def test_update_state_is_none_until_a_cooker_is_there() -> None:
-    server = AnovaLocalServer("127.0.0.1", 0, timings=FAST)
+    server = AnovaLocalServer("127.0.0.1", 0, timings=FAST, expected_key=DEFAULT_KEY)
     await server.listen()
     try:
         assert await server.update_state() is None

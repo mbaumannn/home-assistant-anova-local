@@ -8,13 +8,14 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.anova_local.const import (
     CONF_ID_CARD,
+    CONF_KEY,
     CONF_LISTEN_PORT,
     CONF_SERVER_HOST,
     CONF_TRANSPORT,
     DOMAIN,
     TRANSPORT_WIFI,
 )
-from fake_cooker import FakeCooker
+from fake_cooker import DEFAULT_KEY, FakeCooker
 
 pytestmark = pytest.mark.usefixtures("socket_enabled")
 
@@ -39,6 +40,7 @@ def wifi_entry() -> MockConfigEntry:
             CONF_SERVER_HOST: "127.0.0.1",
             CONF_LISTEN_PORT: 0,
             CONF_ID_CARD: ID_CARD,
+            CONF_KEY: DEFAULT_KEY,
         },
     )
 

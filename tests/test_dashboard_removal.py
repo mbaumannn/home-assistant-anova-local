@@ -13,6 +13,7 @@ import logging
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from fake_cooker import DEFAULT_KEY
 from homeassistant.components import frontend
 from homeassistant.components.lovelace import LOVELACE_DATA
 from homeassistant.components.lovelace.dashboard import (
@@ -28,6 +29,7 @@ from custom_components.anova_local import _running_dashboards_collection as runn
 from custom_components.anova_local.const import (
     CONF_CREATE_DASHBOARD,
     CONF_ID_CARD,
+    CONF_KEY,
     CONF_LISTEN_PORT,
     CONF_SERVER_HOST,
     CONF_TRANSPORT,
@@ -90,6 +92,7 @@ def entry_for(unique_id: str = "AA:BB:CC:DD:EE:01", *, dashboard: bool = True) -
             CONF_SERVER_HOST: "127.0.0.1",
             CONF_LISTEN_PORT: 0,
             CONF_ID_CARD: ID_CARD,
+            CONF_KEY: DEFAULT_KEY,
             CONF_CREATE_DASHBOARD: dashboard,
         },
     )
