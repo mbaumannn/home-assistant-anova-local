@@ -7,7 +7,7 @@ import pytest
 
 from anova_local.const import AnovaStatus, AnovaUnit
 from anova_local.local_server import AnovaLocalServer, AnovaServerError, ServerTimings
-from fake_cooker import FakeCooker
+from fake_cooker import DEFAULT_KEY, FakeCooker
 
 pytestmark = pytest.mark.usefixtures("socket_enabled")
 
@@ -34,6 +34,7 @@ CANDIDATE = ServerTimings(
 
 
 async def start(timings: ServerTimings, **kwargs: object) -> AnovaLocalServer:
+    kwargs.setdefault("expected_key", DEFAULT_KEY)
     server = AnovaLocalServer("127.0.0.1", 0, timings=timings, **kwargs)
     await server.listen()
     return server
@@ -230,18 +231,6 @@ async def test_a_cooker_with_the_wrong_key_is_rejected() -> None:
                 await asyncio.sleep(0.02)
             assert not server.connected                  # the key never matched
             assert server.id_card == "" and server.key == ""   # never trusted
-        finally:
-            await server.close()
-
-
-async def test_a_legacy_entry_without_a_key_is_checked_on_the_id_card() -> None:
-    """An entry made before key authentication keeps working, on the id card."""
-    async with FakeCooker(id_card="f56-a814c163a33", key="anything00") as cooker:
-        server = await start(FAST, expected_id_card="f56-a814c163a33")   # no key
-        try:
-            await cooker.dial(server.server_port)
-            await server.wait_for_cooker(timeout=2)
-            assert server.connected
         finally:
             await server.close()
 

@@ -11,7 +11,7 @@ from anova_local.anova_client import AnovaBLE
 from anova_local.const import AnovaUnit
 from anova_local.local_server import AnovaLocalServer, ServerTimings
 from anova_local.transport import TRANSPORT_METHODS, AnovaTransport
-from fake_cooker import FakeCooker
+from fake_cooker import DEFAULT_KEY, FakeCooker
 
 pytestmark = pytest.mark.usefixtures("socket_enabled")
 
@@ -33,13 +33,13 @@ def test_every_transport_implements_every_method(transport: type) -> None:
 
 
 def test_both_transports_pass_an_isinstance_check() -> None:
-    assert isinstance(AnovaLocalServer("127.0.0.1", 0), AnovaTransport)
+    assert isinstance(AnovaLocalServer("127.0.0.1", 0, expected_key=DEFAULT_KEY), AnovaTransport)
     assert issubclass(AnovaBLE, AnovaTransport)
 
 
 async def test_the_server_transport_methods_drive_the_cooker() -> None:
     async with FakeCooker(speaker=True) as cooker:
-        server = AnovaLocalServer("127.0.0.1", 0, timings=FAST)
+        server = AnovaLocalServer("127.0.0.1", 0, timings=FAST, expected_key=DEFAULT_KEY)
         await server.listen()
         try:
             await cooker.dial(server.server_port)
@@ -71,7 +71,7 @@ async def test_the_server_transport_methods_drive_the_cooker() -> None:
 
 async def test_start_cook_writes_the_preset_before_starting() -> None:
     async with FakeCooker() as cooker:
-        server = AnovaLocalServer("127.0.0.1", 0, timings=FAST)
+        server = AnovaLocalServer("127.0.0.1", 0, timings=FAST, expected_key=DEFAULT_KEY)
         await server.listen()
         try:
             await cooker.dial(server.server_port)
@@ -90,7 +90,7 @@ async def test_start_cook_writes_the_preset_before_starting() -> None:
 
 async def test_disconnect_drops_the_link_but_keeps_listening() -> None:
     async with FakeCooker() as cooker:
-        server = AnovaLocalServer("127.0.0.1", 0, timings=FAST)
+        server = AnovaLocalServer("127.0.0.1", 0, timings=FAST, expected_key=DEFAULT_KEY)
         await server.listen()
         try:
             await cooker.dial(server.server_port)
@@ -110,7 +110,7 @@ async def test_actions_the_cooker_answers_with_an_event_are_not_errors() -> None
     towards closing the link either.
     """
     async with FakeCooker(timer_running=True) as cooker:
-        server = AnovaLocalServer("127.0.0.1", 0, timings=FAST)
+        server = AnovaLocalServer("127.0.0.1", 0, timings=FAST, expected_key=DEFAULT_KEY)
         await server.listen()
         try:
             await cooker.dial(server.server_port)
@@ -129,7 +129,7 @@ async def test_actions_the_cooker_answers_with_an_event_are_not_errors() -> None
 
 async def test_connect_returns_when_no_cooker_ever_dials_in() -> None:
     """Home Assistant must be able to set up while the cooker is switched off."""
-    server = AnovaLocalServer("127.0.0.1", 0, timings=FAST)
+    server = AnovaLocalServer("127.0.0.1", 0, timings=FAST, expected_key=DEFAULT_KEY)
     await server.listen()
     try:
         await server.connect()                           # must not raise

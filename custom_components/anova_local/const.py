@@ -75,7 +75,8 @@ CMD_SMARTLINK_START = "smartlink start"
 CMD_SET_NAME = "set name {name}"
 CMD_CLEAR_ALARM = "clear alarm"
 CMD_SPEAKER_STATUS = "speaker status"
-# The network name may not contain a space and only 2.4 GHz is supported.
+# The network name and password may not contain a space (the command is space
+# delimited) and only 2.4 GHz is supported.
 WIFI_MIN_PASSWORD = 8
 WIFI_MAX_PASSWORD = 63
 

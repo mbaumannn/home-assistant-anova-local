@@ -35,8 +35,8 @@ FAILURES: dict[str, Failure] = {
     ),
     "wifi_credentials_invalid": Failure(
         "wifi_credentials_invalid",
-        "the network name contains a space or the password is outside 8-63 characters",
-        "Use the 2.4 GHz network name without spaces, and a WPA2 password of 8-63 characters.",
+        "the network name or password contains a space, or the password is outside 8-63 characters",
+        "Use the 2.4 GHz network name and a WPA2 password of 8-63 characters, neither with a space.",
     ),
     "wifi_not_joined": Failure(
         "wifi_not_joined",

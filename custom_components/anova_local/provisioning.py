@@ -9,7 +9,7 @@ can undo them, which the config flow tells the user before it writes anything.
 """
 from __future__ import annotations
 
-import random
+import secrets
 import string
 from collections.abc import Callable
 from typing import Protocol
@@ -42,8 +42,13 @@ class BleOnboardingClient(Protocol):
 
 
 def random_key() -> str:
-    """A fresh ten-character lowercase key, the shape ``set number`` expects."""
-    return "".join(random.choices(string.ascii_lowercase + string.digits, k=10))
+    """A fresh ten-character lowercase key, the shape ``set number`` expects.
+
+    The key is the secret the cooker presents when it dials the server, so it is
+    generated with ``secrets``.
+    """
+    alphabet = string.ascii_lowercase + string.digits
+    return "".join(secrets.choice(alphabet) for _ in range(10))
 
 
 def validate_credentials(ssid: str, password: str) -> None:
@@ -56,6 +61,10 @@ def validate_credentials(ssid: str, password: str) -> None:
         raise WifiCredentialsInvalid(
             f"the password must be {WIFI_MIN_PASSWORD} to {WIFI_MAX_PASSWORD} characters"
         )
+    # `wifi para` is space delimited, so a space in the password would write a
+    # malformed line and could leave the cooker's Wi-Fi setting broken.
+    if " " in password:
+        raise WifiCredentialsInvalid("the password cannot contain a space")
 
 
 class AnovaProvisioner:

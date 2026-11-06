@@ -46,8 +46,8 @@ Requires Home Assistant 2026.5.0 or newer.
   Bluetooth-only 800 W model has no Wi-Fi radio and stays on Bluetooth.
 - Home Assistant 2026.5.0 or newer, and a Bluetooth adapter (or an ESPHome
   Bluetooth proxy) within a few metres of the cooker, **for the setup only**.
-- Your **2.4 GHz** Wi-Fi name and password. The cooker cannot join a network
-  name that contains a space.
+- Your **2.4 GHz** Wi-Fi name and password. The cooker cannot use a network
+  name or password that contains a space.
 
 ## Setting up the cooker
 Turn the cooker on. Home Assistant discovers it within a minute:
@@ -144,7 +144,8 @@ The setup and the connection tell you what is wrong and what to check:
 | Nothing appears under **Discovered** | Home Assistant only offers a device it is *currently* hearing advertise, so a weak signal, a busy cooker, or a stale Bluetooth record can hide a cooker it has seen before | Keep the cooker within a couple of metres of Home Assistant, power-cycle it, and restart Home Assistant. You can also skip discovery: **Add integration → Anova Cooker**, then pick the cooker from the list or type the address from the label underneath it. |
 | "The cooker did not answer over Bluetooth..." | Nothing advertises | Is the cooker plugged in and switched on? Its ring should be lit. |
 | "Something else is connected to the cooker." | Its one Bluetooth link is held | Close the Anova app, and any other phone or integration connected to it. |
-| "The cooker cannot use this network..." | The name has a space, or the password is not 8 to 63 characters | Use the 2.4 GHz name without spaces, and a WPA2 password of 8 to 63 characters. |
+| "This Wi-Fi entry has no cooker key..." | The entry was created before key authentication | Delete the entry and add the cooker again, so the Wi-Fi setup writes a key. |
+| "The cooker cannot use this network..." | The name or password has a space, or the password is not 8 to 63 characters | Use the 2.4 GHz name and a WPA2 password of 8 to 63 characters, with no spaces in either. |
 | "The cooker did not join the network within two minutes..." | It did not dial in | Check the password and the 2.4 GHz name, and keep it near the access point while it joins. |
 | "This cooker's firmware does not accept the local server setting..." | The firmware is too old for Wi-Fi control | Use Bluetooth instead, and report it with the firmware version. |
 | "Home Assistant cannot listen on this port." | The port is taken | Choose another port; the cooker is told which port to use, so any free port works. |

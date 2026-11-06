@@ -206,6 +206,44 @@ async def test_a_network_name_with_a_space_is_refused_before_anything_is_written
     assert result["errors"] == {"base": "wifi_credentials_invalid"}
 
 
+async def test_a_password_with_a_space_is_refused_before_anything_is_written(
+    hass, a_cooker_in_range
+) -> None:
+    with patch.object(cf, "AnovaBLE", FakeBle):
+        result = await to_user_form(hass)
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_TRANSPORT: TRANSPORT_WIFI, CONF_ADDRESS: MAC}
+        )
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            {
+                CONF_SSID: "MyHomeWiFi",
+                CONF_PASSWORD: "correct horse 42",
+                CONF_SERVER_HOST: "127.0.0.1",
+                CONF_LISTEN_PORT: 8080,
+            },
+        )
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == {"base": "wifi_credentials_invalid"}
+
+
+async def test_the_wifi_password_is_masked_in_the_form(hass, a_cooker_in_range) -> None:
+    with patch.object(cf, "AnovaBLE", FakeBle):
+        result = await to_user_form(hass)
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_TRANSPORT: TRANSPORT_WIFI, CONF_ADDRESS: MAC}
+        )
+
+    selector = next(
+        validator
+        for key, validator in result["data_schema"].schema.items()
+        if str(key) == CONF_PASSWORD
+    )
+    assert isinstance(selector, cf.TextSelector)
+    assert selector.config["type"] == "password"
+
+
 async def test_a_failed_write_is_reported_with_a_next_step(hass, a_cooker_in_range) -> None:
     with patch.object(cf, "AnovaBLE", FailingBle):
         result = await to_user_form(hass)

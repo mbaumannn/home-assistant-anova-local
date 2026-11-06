@@ -138,9 +138,13 @@ class AnovaLocalServer:
         on_state: Callable[[AnovaState], None] | None = None,
         on_offline: Callable[[], None] | None = None,
         expected_id_card: str | None = None,
-        expected_key: str | None = None,
+        expected_key: str,
         history_size: int = 10,
     ) -> None:
+        if not expected_key:
+            raise ValueError(
+                "a cooker key is required: without one any device that dials in is accepted"
+            )
         self.host = host
         self.port = port
         self.timings = timings or ServerTimings()
@@ -495,7 +499,7 @@ class AnovaLocalServer:
             raise AnovaRejectedError(
                 f"another cooker dialled in ({id_card}, expected {self.expected_id_card})"
             )
-        if self.expected_key and not hmac.compare_digest(key, self.expected_key):
+        if not hmac.compare_digest(key, self.expected_key):
             # Never put the key in the message: the reply is the secret.
             raise AnovaRejectedError("the dial-in did not present the expected key")
 
