@@ -17,7 +17,7 @@ from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.exceptions import ConfigEntryNotReady
+from homeassistant.exceptions import ConfigEntryError, ConfigEntryNotReady
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.typing import ConfigType
 
@@ -400,12 +400,11 @@ async def _async_setup_wifi(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     key = entry.data.get(CONF_KEY)
     if not key:
-        # The author's own entry predates key authentication. It keeps working on
-        # the (non-secret) id card; a fresh Wi-Fi setup writes a key.
-        LOGGER.warning(
-            "Anova: this Wi-Fi entry has no cooker key (it was created before key "
-            "authentication). The cooker is accepted on its id card only; run the "
-            "Wi-Fi setup again to give it a key."
+        # Fail closed: without the key any device that answers the handshake
+        # would be accepted. The entry cannot repair itself, so stop retrying.
+        raise ConfigEntryError(
+            "this Wi-Fi entry has no cooker key; delete the entry and add the "
+            "cooker again to run the Wi-Fi setup"
         )
 
     server = AnovaLocalServer(

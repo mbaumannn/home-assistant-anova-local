@@ -11,17 +11,19 @@ import asyncio
 import logging
 
 import pytest
+from homeassistant.config_entries import ConfigEntryState
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.anova_local.const import (
     CONF_ID_CARD,
+    CONF_KEY,
     CONF_LISTEN_PORT,
     CONF_SERVER_HOST,
     CONF_TRANSPORT,
     DOMAIN,
     TRANSPORT_WIFI,
 )
-from fake_cooker import FakeCooker
+from fake_cooker import DEFAULT_KEY, FakeCooker
 
 pytestmark = pytest.mark.usefixtures("socket_enabled")
 
@@ -47,6 +49,7 @@ def wifi_entry() -> MockConfigEntry:
             CONF_SERVER_HOST: "127.0.0.1",
             CONF_LISTEN_PORT: 0,          # any free port; the fake cooker dials the real one
             CONF_ID_CARD: ID_CARD,
+            CONF_KEY: DEFAULT_KEY,
         },
     )
 
@@ -168,24 +171,30 @@ async def test_the_device_says_which_link_is_in_use(hass, enable_custom_integrat
     assert device.model == "Precision Cooker (Wi-Fi)"
 
 
-async def test_a_legacy_entry_without_a_key_warns_once_and_still_works(
+async def test_a_wifi_entry_without_a_key_fails_closed(
     hass, enable_custom_integrations, caplog
 ) -> None:
-    """An entry made before key authentication keeps working, on the id card."""
-    entry = wifi_entry()                         # no CONF_KEY: a legacy entry
+    """An entry from before key authentication has no key to check: refuse it.
+
+    Without a key any device that answers the handshake would be accepted, so the
+    entry stops instead of falling back to the (non-secret) id card.
+    """
+    entry = MockConfigEntry(                     # the shape a pre-key entry has: no key
+        domain=DOMAIN,
+        unique_id="<cooker BLE MAC, redacted>",
+        data={
+            CONF_TRANSPORT: TRANSPORT_WIFI,
+            CONF_SERVER_HOST: "127.0.0.1",
+            CONF_LISTEN_PORT: 0,
+            CONF_ID_CARD: ID_CARD,
+        },
+    )
     entry.add_to_hass(hass)
-    with caplog.at_level(logging.WARNING):
-        assert await hass.config_entries.async_setup(entry.entry_id)
+    with caplog.at_level(logging.ERROR):
+        assert not await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
 
-    warnings = [
-        record
-        for record in caplog.records
-        if record.levelno == logging.WARNING and "key" in record.getMessage().lower()
-    ]
-    assert len(warnings) == 1                    # one warning per setup, not per dial-in
-
-    server = hass.data[DOMAIN][entry.entry_id].client
-    async with FakeCooker() as cooker:           # the matching id card is enough
-        await cooker.dial(server.server_port)
-        assert await wait_for_state(hass, "sensor.anova_cooker_status", "idle") == "idle"
+    assert entry.state is ConfigEntryState.SETUP_ERROR
+    assert entry.entry_id not in hass.data.get(DOMAIN, {})
+    messages = [record.getMessage() for record in caplog.records]
+    assert any("delete the entry and add the cooker again" in message for message in messages)

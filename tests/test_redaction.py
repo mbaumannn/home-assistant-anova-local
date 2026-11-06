@@ -159,7 +159,7 @@ async def test_the_silent_commands_are_sent_without_a_wait(
 
 async def test_the_server_history_masks_the_get_number_reply(caplog) -> None:
     async with FakeCooker() as cooker:
-        server = AnovaLocalServer("127.0.0.1", 0, timings=FAST)
+        server = AnovaLocalServer("127.0.0.1", 0, timings=FAST, expected_key=DEFAULT_KEY)
         await server.listen()
         try:
             with caplog.at_level(logging.DEBUG):

@@ -32,6 +32,7 @@ from custom_components.anova_local import config_flow as cf
 from custom_components.anova_local.const import (
     CONF_CREATE_DASHBOARD,
     CONF_ID_CARD,
+    CONF_KEY,
     CONF_LISTEN_PORT,
     CONF_PASSWORD,
     CONF_SERVER_HOST,
@@ -41,6 +42,7 @@ from custom_components.anova_local.const import (
     DOMAIN,
     TRANSPORT_WIFI,
 )
+from fake_cooker import DEFAULT_KEY
 from test_config_flow_wifi import ID_CARD, MAC, FakeBle, to_user_form
 
 
@@ -107,6 +109,7 @@ def wifi_entry(create_dashboard=DEFAULT_CREATE_DASHBOARD) -> MockConfigEntry:
         CONF_SERVER_HOST: "127.0.0.1",
         CONF_LISTEN_PORT: 0,  # any free port
         CONF_ID_CARD: ID_CARD,
+        CONF_KEY: DEFAULT_KEY,
     }
     if create_dashboard is not None:
         data[CONF_CREATE_DASHBOARD] = create_dashboard

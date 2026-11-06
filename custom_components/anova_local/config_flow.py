@@ -17,6 +17,9 @@ from homeassistant.helpers.selector import (
     SelectSelector,
     SelectSelectorConfig,
     SelectSelectorMode,
+    TextSelector,
+    TextSelectorConfig,
+    TextSelectorType,
 )
 
 from .anova_client import AnovaBLE, AnovaCommandError, AnovaConnectionError
@@ -211,7 +214,7 @@ class AnovaConfigFlow(ConfigFlow, domain=DOMAIN):
                         # The cooker's identity, so the server can check who dialled in.
                         CONF_ID_CARD: self._provisioned.get(CONF_ID_CARD, ""),
                         # The key authenticates the cooker when it dials the server.
-                        CONF_KEY: self._provisioned.get(CONF_KEY, ""),
+                        CONF_KEY: self._provisioned[CONF_KEY],
                         CONF_CREATE_DASHBOARD: user_input.get(
                             CONF_CREATE_DASHBOARD, DEFAULT_CREATE_DASHBOARD
                         ),
@@ -223,7 +226,9 @@ class AnovaConfigFlow(ConfigFlow, domain=DOMAIN):
             data_schema=vol.Schema(
                 {
                     vol.Required(CONF_SSID): str,
-                    vol.Required(CONF_PASSWORD): str,
+                    vol.Required(CONF_PASSWORD): TextSelector(
+                        TextSelectorConfig(type=TextSelectorType.PASSWORD)
+                    ),
                     vol.Required(CONF_SERVER_HOST, default=self._default_host()): str,
                     vol.Required(CONF_LISTEN_PORT, default=DEFAULT_LISTEN_PORT): int,
                     vol.Required(

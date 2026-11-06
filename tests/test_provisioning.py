@@ -1,6 +1,8 @@
 """The Bluetooth onboarding: what is written to the cooker, and what is refused."""
 from __future__ import annotations
 
+import secrets
+
 import pytest
 
 from anova_local.provisioning import (
@@ -20,9 +22,21 @@ def test_the_key_has_the_shape_set_number_expects() -> None:
     assert random_key() != random_key()
 
 
+def test_the_key_comes_from_the_cryptographic_generator(monkeypatch) -> None:
+    """The key is a secret, so it must not come from the `random` module."""
+    monkeypatch.setattr(secrets, "choice", lambda _alphabet: "a")
+    assert random_key() == "a" * 10
+
+
 def test_a_network_name_with_a_space_is_refused() -> None:
     with pytest.raises(WifiCredentialsInvalid, match="space"):
         validate_credentials("My Wifi", "hunter22")
+
+
+def test_a_password_with_a_space_is_refused() -> None:
+    """`wifi para` is space delimited: a space would write a malformed line."""
+    with pytest.raises(WifiCredentialsInvalid, match="space"):
+        validate_credentials("MyHomeWiFi", "correct horse 42")
 
 
 def test_an_empty_network_name_is_refused() -> None:
