@@ -133,6 +133,7 @@ class AnovaLocalServer:
         host: str,
         port: int,
         *,
+        bind_host: str = "0.0.0.0",
         timings: ServerTimings | None = None,
         on_event: Callable[[str], None] | None = None,
         on_state: Callable[[AnovaState], None] | None = None,
@@ -146,6 +147,7 @@ class AnovaLocalServer:
                 "a cooker key is required: without one any device that dials in is accepted"
             )
         self.host = host
+        self.bind_host = bind_host
         self.port = port
         self.timings = timings or ServerTimings()
         self.on_event = on_event
@@ -189,8 +191,8 @@ class AnovaLocalServer:
         Named ``listen`` and not ``start``: ``start()`` is the transport call that
         tells the cooker to heat, and the two must never be confused.
         """
-        self._server = await asyncio.start_server(self._on_client, self.host, self.port)
-        LOGGER.debug("Anova: listening for the cooker on %s:%s", self.host, self.server_port)
+        self._server = await asyncio.start_server(self._on_client, self.bind_host, self.port)
+        LOGGER.debug("Anova: listening on %s:%s; cooker connects to %s:%s", self.bind_host, self.server_port, self.host, self.server_port)
 
     async def close(self) -> None:
         """Close the link and stop listening, then let every task finish.

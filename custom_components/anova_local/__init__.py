@@ -427,7 +427,7 @@ async def _async_setup_wifi(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         await server.listen()
     except OSError as err:
         hass.data[DOMAIN].pop(entry.entry_id, None)
-        raise ConfigEntryNotReady(f"cannot listen on {host}:{port}: {err}") from err
+        raise ConfigEntryNotReady(f"cannot listen on {server.bind_host}:{port}: {err}") from err
 
     # Stop listening when the entry is unloaded or reloaded.
     entry.async_on_unload(server.close)

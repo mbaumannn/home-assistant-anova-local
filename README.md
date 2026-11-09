@@ -201,6 +201,11 @@ nowhere for the message to go, and nothing tells you.
   that key, or it is dropped. The connection is plain TCP on your own network,
   as the cooker's firmware speaks it, so treat it like any other local IoT
   device.
+  The listener binds all IPv4 interfaces; restrict access to trusted networks
+  with your firewall. In Docker bridge or overlay networking, publish the
+  configured TCP port and use the host address reachable by the cooker. Each
+  cooker needs its own free port; listeners cannot share a port on separate
+  interfaces when this listener is active.
 - Another device connecting to that port cannot push the cooker off: the
   cooker's link is only replaced by a connection that passed the key check.
 - The Wi-Fi password is used once during setup. It is never stored, and never
