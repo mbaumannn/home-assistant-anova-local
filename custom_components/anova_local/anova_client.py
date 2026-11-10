@@ -116,7 +116,7 @@ def parse_unit(raw: str) -> AnovaUnit:
 class AnovaBLE:
     """Connects to an Anova cooker and reads/writes over the BLE protocol."""
 
-    def __init__(self, *, ble_device: BLEDevice | object) -> None:
+    def __init__(self, *, ble_device: BLEDevice | object | None) -> None:
         self.ble_device = ble_device
         self.name = DEVICE_NAME
         self._client: BleakClient | None = None
@@ -179,6 +179,8 @@ class AnovaBLE:
         """Return a connection. Must be called while holding ``_cmd_lock``."""
         if self._client is not None and self._client.is_connected:
             return self._client
+        if self.ble_device is None:
+            raise AnovaConnectionError("the cooker is not in range")
         try:
             self._client = await establish_connection(
                 BleakClientWithServiceCache,

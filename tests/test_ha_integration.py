@@ -89,6 +89,7 @@ async def _setup(
     *,
     unique_id: str = ADDRESS_UPPER,
     responses: dict[str, str] | None = None,
+    in_range: bool = True,
 ):
     entry = MockConfigEntry(domain=DOMAIN, unique_id=unique_id, data={})
     entry.add_to_hass(hass)
@@ -100,7 +101,7 @@ async def _setup(
 
     def fake_lookup(_hass, address, connectable=True):
         captured["lookup"] = address
-        return object()
+        return object() if in_range else None
 
     def fake_register(_hass, cb, matcher, _mode):
         captured["matcher"] = matcher
@@ -156,6 +157,24 @@ async def test_new_advertisement_updates_ble_device(hass, monkeypatch):
     captured["cb"](SimpleNamespace(device=device), BluetoothChange.ADVERTISEMENT)
 
     assert client.ble_device is device
+
+
+async def test_setup_while_the_cooker_is_off(hass, monkeypatch):
+    """An absent cooker is normal: the entry loads, the entities wait for it."""
+    from homeassistant.config_entries import ConfigEntryState
+    from homeassistant.const import STATE_UNAVAILABLE
+
+    entry, _transport, captured = await _setup(hass, monkeypatch, in_range=False)
+
+    assert entry.state is ConfigEntryState.LOADED
+    climate = _entity_id(hass, "climate")
+    assert hass.states.get(climate).state == STATE_UNAVAILABLE
+
+    captured["cb"](SimpleNamespace(device=object()), BluetoothChange.ADVERTISEMENT)
+    await hass.data[DOMAIN][entry.entry_id].async_refresh()
+    await hass.async_block_till_done()
+
+    assert hass.states.get(climate).state != STATE_UNAVAILABLE
 
 
 async def test_unload_disconnects(hass, monkeypatch):
