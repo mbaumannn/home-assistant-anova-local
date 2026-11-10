@@ -342,12 +342,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # advertisements, so the callback matcher and the device lookup match.
     address = format_ble_address(entry.unique_id)
 
+    # Setting up while the cooker is off is normal: the entities appear and stay
+    # ``unavailable`` with a reason until it advertises and a poll reaches it.
     device = bluetooth.async_ble_device_from_address(
         hass, address, connectable=True
     )
-    if device is None:
-        raise ConfigEntryNotReady(f"Anova {address} not in range")
-
     client = AnovaBLE(ble_device=device)
 
     @callback
@@ -375,7 +374,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     entry.async_on_unload(client.disconnect)
 
     try:
-        await coordinator.async_config_entry_first_refresh()
+        await coordinator.async_refresh()
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
         await _async_ensure_anova_dashboard(hass, entry)
     except Exception:
